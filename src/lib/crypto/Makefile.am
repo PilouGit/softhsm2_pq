@@ -151,7 +151,13 @@ libsofthsm_crypto_la_SOURCES +=	MLKEMPublicKey.cpp \
 				OQSMLKEMKeyPair.cpp \
 				OQSMLDSA.cpp \
 				OQSMLDSAKeyPair.cpp \
-				OQSRNG.cpp
+				OQSRNG.cpp \
+				HybridCombiner.cpp \
+				HybridKEMParameters.cpp \
+				HybridKEMPublicKey.cpp \
+				HybridKEMPrivateKey.cpp \
+				HybridKEMKeyPair.cpp \
+				HybridKEM.cpp
 libsofthsm_crypto_la_LIBADD +=	@PQC_LIBS@
 AM_CPPFLAGS +=			@PQC_INCLUDES@
 endif
