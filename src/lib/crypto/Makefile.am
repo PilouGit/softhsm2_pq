@@ -137,3 +137,21 @@ libsofthsm_crypto_la_SOURCES +=	BotanAES.cpp \
 				BotanUtil.cpp \
 				Botan_ecb.cpp
 endif
+
+# Compile with support of liboqs (Post-Quantum Cryptography)
+if WITH_PQC
+libsofthsm_crypto_la_SOURCES +=	MLKEMPublicKey.cpp \
+				MLKEMPrivateKey.cpp \
+				MLKEMParameters.cpp \
+				MLDSAPublicKey.cpp \
+				MLDSAPrivateKey.cpp \
+				MLDSAParameters.cpp \
+				OQSCryptoFactory.cpp \
+				OQSMLKEM.cpp \
+				OQSMLKEMKeyPair.cpp \
+				OQSMLDSA.cpp \
+				OQSMLDSAKeyPair.cpp \
+				OQSRNG.cpp
+libsofthsm_crypto_la_LIBADD +=	@PQC_LIBS@
+AM_CPPFLAGS +=			@PQC_INCLUDES@
+endif

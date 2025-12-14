@@ -166,6 +166,28 @@ public:
 		CK_ULONG ulCount,
 		CK_OBJECT_HANDLE_PTR phKey
 	);
+	CK_RV C_Encapsulate
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_MECHANISM_PTR pMechanism,
+		CK_OBJECT_HANDLE hPublicKey,
+		CK_ATTRIBUTE_PTR pTemplate,
+		CK_ULONG ulAttributeCount,
+		CK_OBJECT_HANDLE_PTR phKey,
+		CK_BYTE_PTR pEncapsulatedKey,
+		CK_ULONG_PTR pulEncapsulatedKeyLen
+	);
+	CK_RV C_Decapsulate
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_MECHANISM_PTR pMechanism,
+		CK_OBJECT_HANDLE hPrivateKey,
+		CK_BYTE_PTR pEncapsulatedKey,
+		CK_ULONG ulEncapsulatedKeyLen,
+		CK_ATTRIBUTE_PTR pTemplate,
+		CK_ULONG ulAttributeCount,
+		CK_OBJECT_HANDLE_PTR phKey
+	);
 	CK_RV C_SeedRandom(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pSeed, CK_ULONG ulSeedLen);
 	CK_RV C_GenerateRandom(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pRandomData, CK_ULONG ulRandomLen);
 	CK_RV C_GetFunctionStatus(CK_SESSION_HANDLE hSession);
@@ -350,6 +372,36 @@ private:
 		CK_BBOOL isPrivateKeyOnToken,
 		CK_BBOOL isPrivateKeyPrivate
 	);
+#ifdef WITH_PQC
+	CK_RV generateMLKEM
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+		CK_ULONG ulPublicKeyAttributeCount,
+		CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+		CK_ULONG ulPrivateKeyAttributeCount,
+		CK_OBJECT_HANDLE_PTR phPublicKey,
+		CK_OBJECT_HANDLE_PTR phPrivateKey,
+		CK_BBOOL isPublicKeyOnToken,
+		CK_BBOOL isPublicKeyPrivate,
+		CK_BBOOL isPrivateKeyOnToken,
+		CK_BBOOL isPrivateKeyPrivate
+	);
+	CK_RV generateMLDSA
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+		CK_ULONG ulPublicKeyAttributeCount,
+		CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+		CK_ULONG ulPrivateKeyAttributeCount,
+		CK_OBJECT_HANDLE_PTR phPublicKey,
+		CK_OBJECT_HANDLE_PTR phPrivateKey,
+		CK_BBOOL isPublicKeyOnToken,
+		CK_BBOOL isPublicKeyPrivate,
+		CK_BBOOL isPrivateKeyOnToken,
+		CK_BBOOL isPrivateKeyPrivate
+	);
+#endif
 	CK_RV generateGeneric
 	(
 		CK_SESSION_HANDLE hSession,

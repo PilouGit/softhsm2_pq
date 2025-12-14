@@ -224,6 +224,34 @@ protected:
 	bool initialized;
 };
 
+#ifdef WITH_PQC
+class P11MLKEMPublicKeyObj : public P11PublicKeyObj
+{
+public:
+	// Constructor
+	P11MLKEMPublicKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+
+class P11MLDSAPublicKeyObj : public P11PublicKeyObj
+{
+public:
+	// Constructor
+	P11MLDSAPublicKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+#endif // WITH_PQC
+
 class P11PrivateKeyObj : public P11KeyObj
 {
 protected:
@@ -312,6 +340,34 @@ public:
 protected:
 	bool initialized;
 };
+
+#ifdef WITH_PQC
+class P11MLKEMPrivateKeyObj : public P11PrivateKeyObj
+{
+public:
+	// Constructor
+	P11MLKEMPrivateKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+
+class P11MLDSAPrivateKeyObj : public P11PrivateKeyObj
+{
+public:
+	// Constructor
+	P11MLDSAPrivateKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+#endif // WITH_PQC
 
 class P11SecretKeyObj : public P11KeyObj
 {

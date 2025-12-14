@@ -63,6 +63,42 @@ AC_CHECK_HEADERS([pthread.h])
 # What crypto backend to use and if we want to have support GOST
 ACX_CRYPTO_BACKEND
 
+# Post-Quantum Cryptography support
+AC_ARG_WITH(pqc,
+	AS_HELP_STRING([--with-pqc=IMPL],
+		[Enable post-quantum cryptography support (no|liboqs)]
+	),
+	[pqc_impl="${withval}"],
+	[pqc_impl="no"]
+)
+
+AC_MSG_CHECKING(for post-quantum cryptography support)
+if test "x${pqc_impl}" = "xliboqs"; then
+	AC_MSG_RESULT(liboqs)
+	ACX_LIBOQS(0,10,0)
+	PQC_INCLUDES=$LIBOQS_CFLAGS
+	PQC_LIBS=$LIBOQS_LIBS
+	AC_DEFINE_UNQUOTED(
+		[WITH_PQC],
+		[1],
+		[Compile with post-quantum cryptography support]
+	)
+	AC_DEFINE_UNQUOTED(
+		[WITH_LIBOQS],
+		[1],
+		[Compile with liboqs support]
+	)
+elif test "x${pqc_impl}" = "xno"; then
+	AC_MSG_RESULT(no)
+else
+	AC_MSG_RESULT(Unknown)
+	AC_MSG_ERROR([PQC implementation ${pqc_impl} not supported. Use liboqs or no.])
+fi
+
+AC_SUBST(PQC_INCLUDES)
+AC_SUBST(PQC_LIBS)
+AM_CONDITIONAL([WITH_PQC], [test "x${pqc_impl}" = "xliboqs"])
+
 # Non-paged memory for secure storage
 ACX_NON_PAGED_MEMORY
 

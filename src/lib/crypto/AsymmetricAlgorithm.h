@@ -53,7 +53,12 @@ struct AsymAlgo
 		ECDH,
 		ECDSA,
 		GOST,
-		EDDSA
+		EDDSA,
+#ifdef WITH_PQC
+		MLKEM,      // ML-KEM (Kyber) - Key Encapsulation Mechanism
+		MLDSA,      // ML-DSA (Dilithium) - Digital Signature Algorithm
+		SLHDSA      // SLH-DSA (SPHINCS+) - Stateless Hash-based Signature
+#endif
         };
 };
 
@@ -92,7 +97,32 @@ struct AsymMech
 		ECDSA_SHA512,
 		GOST,
 		GOST_GOST,
-		EDDSA
+		EDDSA,
+#ifdef WITH_PQC
+		// ML-KEM (Kyber) mechanisms
+		MLKEM,              // Generic ML-KEM encapsulate/decapsulate
+
+		// ML-DSA (Dilithium) mechanisms
+		MLDSA,              // Pure ML-DSA signature (no hash)
+		MLDSA_SHA224,       // ML-DSA with SHA-224 pre-hash
+		MLDSA_SHA256,       // ML-DSA with SHA-256 pre-hash
+		MLDSA_SHA384,       // ML-DSA with SHA-384 pre-hash
+		MLDSA_SHA512,       // ML-DSA with SHA-512 pre-hash
+
+		// SLH-DSA (SPHINCS+) mechanisms
+		SLHDSA_SHA2_128S,   // SLH-DSA with SHA2-128s parameter set
+		SLHDSA_SHA2_128F,   // SLH-DSA with SHA2-128f parameter set
+		SLHDSA_SHA2_192S,   // SLH-DSA with SHA2-192s parameter set
+		SLHDSA_SHA2_192F,   // SLH-DSA with SHA2-192f parameter set
+		SLHDSA_SHA2_256S,   // SLH-DSA with SHA2-256s parameter set
+		SLHDSA_SHA2_256F,   // SLH-DSA with SHA2-256f parameter set
+		SLHDSA_SHAKE_128S,  // SLH-DSA with SHAKE-128s parameter set
+		SLHDSA_SHAKE_128F,  // SLH-DSA with SHAKE-128f parameter set
+		SLHDSA_SHAKE_192S,  // SLH-DSA with SHAKE-192s parameter set
+		SLHDSA_SHAKE_192F,  // SLH-DSA with SHAKE-192f parameter set
+		SLHDSA_SHAKE_256S,  // SLH-DSA with SHAKE-256s parameter set
+		SLHDSA_SHAKE_256F   // SLH-DSA with SHAKE-256f parameter set
+#endif
 	};
 };
 

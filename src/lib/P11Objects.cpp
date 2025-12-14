@@ -1032,6 +1032,88 @@ bool P11GOSTPublicKeyObj::init(OSObject *inobject)
 	return true;
 }
 
+#ifdef WITH_PQC
+// ML-KEM Public Key
+P11MLKEMPublicKeyObj::P11MLKEMPublicKeyObj()
+{
+	initialized = false;
+}
+
+bool P11MLKEMPublicKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_ML_KEM) {
+		OSAttribute setKeyType((unsigned long)CKK_ML_KEM);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PublicKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+
+// ML-DSA Public Key
+P11MLDSAPublicKeyObj::P11MLDSAPublicKeyObj()
+{
+	initialized = false;
+}
+
+bool P11MLDSAPublicKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_ML_DSA) {
+		OSAttribute setKeyType((unsigned long)CKK_ML_DSA);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PublicKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+#endif // WITH_PQC
+
 //constructor
 P11PrivateKeyObj::P11PrivateKeyObj()
 {
@@ -1440,6 +1522,90 @@ bool P11GOSTPrivateKeyObj::init(OSObject *inobject)
 	initialized = true;
 	return true;
 }
+
+#ifdef WITH_PQC
+// Constructor
+P11MLKEMPrivateKeyObj::P11MLKEMPrivateKeyObj()
+{
+	initialized = false;
+}
+
+// Add attributes
+bool P11MLKEMPrivateKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_ML_KEM) {
+		OSAttribute setKeyType((unsigned long)CKK_ML_KEM);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PrivateKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+
+// Constructor
+P11MLDSAPrivateKeyObj::P11MLDSAPrivateKeyObj()
+{
+	initialized = false;
+}
+
+// Add attributes
+bool P11MLDSAPrivateKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_ML_DSA) {
+		OSAttribute setKeyType((unsigned long)CKK_ML_DSA);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PrivateKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+#endif // WITH_PQC
 
 // Constructor
 P11SecretKeyObj::P11SecretKeyObj()
