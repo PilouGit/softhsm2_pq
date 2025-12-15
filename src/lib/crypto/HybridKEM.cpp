@@ -185,12 +185,12 @@ bool HybridKEM::getCiphertextSizes(CK_MECHANISM_TYPE mechanism, size_t& ctPQCSiz
 	{
 		case CKM_VENDOR_MLKEM768_ECDH_P256:
 			ctPQCSize = 1088;  // ML-KEM-768 ciphertext
-			ctClassicalSize = 65;  // P-256 public key (uncompressed)
+			ctClassicalSize = 93;  // P-256 public key (DER encoded)
 			return true;
 
 		case CKM_VENDOR_MLKEM1024_ECDH_P384:
 			ctPQCSize = 1568;  // ML-KEM-1024 ciphertext
-			ctClassicalSize = 97;  // P-384 public key (uncompressed)
+			ctClassicalSize = 122;  // P-384 public key (DER encoded)
 			return true;
 
 		case CKM_VENDOR_MLKEM768_X25519:

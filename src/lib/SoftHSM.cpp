@@ -71,6 +71,14 @@
 #include "MLDSAParameters.h"
 #include "OQSMLKEM.h"
 #include "OQSMLDSA.h"
+#include "HybridKEMPublicKey.h"
+#include "HybridKEMPrivateKey.h"
+#include "HybridKEMParameters.h"
+#include "HybridKEM.h"
+#include "HybridSignaturePublicKey.h"
+#include "HybridSignaturePrivateKey.h"
+#include "HybridSignatureParameters.h"
+#include "HybridSignature.h"
 #endif
 #include "cryptoki.h"
 #include "SoftHSM.h"
@@ -6168,6 +6176,15 @@ CK_RV SoftHSM::C_GenerateKeyPair
 		case CKM_ML_DSA_KEY_PAIR_GEN:
 			keyType = CKK_ML_DSA;
 			break;
+		case CKM_VENDOR_MLKEM768_ECDH_P256:
+		case CKM_VENDOR_MLKEM1024_ECDH_P384:
+		case CKM_VENDOR_MLKEM768_X25519:
+			keyType = CKK_VENDOR_HYBRID_KEM;
+			break;
+		case CKM_VENDOR_MLDSA65_ECDSA_P256:
+		case CKM_VENDOR_MLDSA87_ECDSA_P384:
+			keyType = CKK_VENDOR_HYBRID_SIGNATURE;
+			break;
 #endif
 		default:
 			return CKR_MECHANISM_INVALID;
@@ -6201,6 +6218,10 @@ CK_RV SoftHSM::C_GenerateKeyPair
 		return CKR_TEMPLATE_INCONSISTENT;
 	if (pMechanism->mechanism == CKM_ML_DSA_KEY_PAIR_GEN && keyType != CKK_ML_DSA)
 		return CKR_TEMPLATE_INCONSISTENT;
+	if (IS_HYBRID_KEM_MECHANISM(pMechanism->mechanism) && keyType != CKK_VENDOR_HYBRID_KEM)
+		return CKR_TEMPLATE_INCONSISTENT;
+	if (IS_HYBRID_SIGNATURE_MECHANISM(pMechanism->mechanism) && keyType != CKK_VENDOR_HYBRID_SIGNATURE)
+		return CKR_TEMPLATE_INCONSISTENT;
 #endif
 
 	// Extract information from the private key template that is needed to create the object.
@@ -6229,6 +6250,10 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	if (pMechanism->mechanism == CKM_ML_KEM_KEY_PAIR_GEN && keyType != CKK_ML_KEM)
 		return CKR_TEMPLATE_INCONSISTENT;
 	if (pMechanism->mechanism == CKM_ML_DSA_KEY_PAIR_GEN && keyType != CKK_ML_DSA)
+		return CKR_TEMPLATE_INCONSISTENT;
+	if (IS_HYBRID_KEM_MECHANISM(pMechanism->mechanism) && keyType != CKK_VENDOR_HYBRID_KEM)
+		return CKR_TEMPLATE_INCONSISTENT;
+	if (IS_HYBRID_SIGNATURE_MECHANISM(pMechanism->mechanism) && keyType != CKK_VENDOR_HYBRID_SIGNATURE)
 		return CKR_TEMPLATE_INCONSISTENT;
 #endif
 
@@ -6319,6 +6344,28 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	if (pMechanism->mechanism == CKM_ML_DSA_KEY_PAIR_GEN)
 	{
 			return this->generateMLDSA(hSession,
+									 pPublicKeyTemplate, ulPublicKeyAttributeCount,
+									 pPrivateKeyTemplate, ulPrivateKeyAttributeCount,
+									 phPublicKey, phPrivateKey,
+									 ispublicKeyToken, ispublicKeyPrivate, isprivateKeyToken, isprivateKeyPrivate);
+	}
+
+	// Generate Hybrid KEM keys
+	if (IS_HYBRID_KEM_MECHANISM(pMechanism->mechanism))
+	{
+			return this->generateHybridKEM(hSession,
+									 pMechanism,
+									 pPublicKeyTemplate, ulPublicKeyAttributeCount,
+									 pPrivateKeyTemplate, ulPrivateKeyAttributeCount,
+									 phPublicKey, phPrivateKey,
+									 ispublicKeyToken, ispublicKeyPrivate, isprivateKeyToken, isprivateKeyPrivate);
+	}
+
+	// Generate Hybrid Signature keys
+	if (IS_HYBRID_SIGNATURE_MECHANISM(pMechanism->mechanism))
+	{
+			return this->generateHybridSignature(hSession,
+									 pMechanism,
 									 pPublicKeyTemplate, ulPublicKeyAttributeCount,
 									 pPrivateKeyTemplate, ulPrivateKeyAttributeCount,
 									 phPublicKey, phPrivateKey,
@@ -11588,6 +11635,426 @@ CK_RV SoftHSM::generateMLDSA
 			if (ospub) ospub->destroyObject();
 			*phPublicKey = CK_INVALID_HANDLE;
 		}
+	}
+
+	return rv;
+}
+
+// Generate a Hybrid KEM key pair
+CK_RV SoftHSM::generateHybridKEM
+(
+	CK_SESSION_HANDLE hSession,
+	CK_MECHANISM_PTR pMechanism,
+	CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+	CK_ULONG ulPublicKeyAttributeCount,
+	CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+	CK_ULONG ulPrivateKeyAttributeCount,
+	CK_OBJECT_HANDLE_PTR phPublicKey,
+	CK_OBJECT_HANDLE_PTR phPrivateKey,
+	CK_BBOOL isPublicKeyOnToken,
+	CK_BBOOL isPublicKeyPrivate,
+	CK_BBOOL isPrivateKeyOnToken,
+	CK_BBOOL isPrivateKeyPrivate
+)
+{
+	*phPublicKey = CK_INVALID_HANDLE;
+	*phPrivateKey = CK_INVALID_HANDLE;
+
+	// Get the session
+	Session* session = (Session*)handleManager->getSession(hSession);
+	if (session == NULL)
+		return CKR_SESSION_HANDLE_INVALID;
+
+	// Get the token
+	Token* token = session->getToken();
+	if (token == NULL)
+		return CKR_GENERAL_ERROR;
+
+	// Set the parameters based on the mechanism
+	HybridKEMParameters p;
+	p.setHybridMechanism(pMechanism->mechanism);
+
+	// Generate key pair using HybridKEM algorithm
+	AsymmetricKeyPair* kp = NULL;
+	HybridKEM hybridKEM;
+	if (!hybridKEM.generateKeyPair(&kp, &p))
+	{
+		ERROR_MSG("Could not generate Hybrid KEM key pair");
+		return CKR_GENERAL_ERROR;
+	}
+
+	HybridKEMPublicKey* pub = (HybridKEMPublicKey*) kp->getPublicKey();
+	HybridKEMPrivateKey* priv = (HybridKEMPrivateKey*) kp->getPrivateKey();
+
+	CK_RV rv = CKR_OK;
+
+	// Create a public key using C_CreateObject
+	if (rv == CKR_OK)
+	{
+		const CK_ULONG maxAttribs = 32;
+		CK_OBJECT_CLASS publicKeyClass = CKO_PUBLIC_KEY;
+		CK_KEY_TYPE publicKeyType = CKK_VENDOR_HYBRID_KEM;
+		CK_ATTRIBUTE publicKeyAttribs[maxAttribs] = {
+			{ CKA_CLASS, &publicKeyClass, sizeof(publicKeyClass) },
+			{ CKA_TOKEN, &isPublicKeyOnToken, sizeof(isPublicKeyOnToken) },
+			{ CKA_PRIVATE, &isPublicKeyPrivate, sizeof(isPublicKeyPrivate) },
+			{ CKA_KEY_TYPE, &publicKeyType, sizeof(publicKeyType) },
+		};
+		CK_ULONG publicKeyAttribsCount = 4;
+
+		// Add the additional attributes
+		if (ulPublicKeyAttributeCount > (maxAttribs - publicKeyAttribsCount))
+			rv = CKR_TEMPLATE_INCONSISTENT;
+		for (CK_ULONG i=0; i < ulPublicKeyAttributeCount && rv == CKR_OK; ++i)
+		{
+			switch (pPublicKeyTemplate[i].type)
+			{
+				case CKA_CLASS:
+				case CKA_TOKEN:
+				case CKA_PRIVATE:
+				case CKA_KEY_TYPE:
+					continue;
+				default:
+					publicKeyAttribs[publicKeyAttribsCount++] = pPublicKeyTemplate[i];
+			}
+		}
+
+		if (rv == CKR_OK)
+			rv = this->CreateObject(hSession, publicKeyAttribs, publicKeyAttribsCount, phPublicKey,OBJECT_OP_GENERATE);
+
+		// Store the attributes that are being supplied
+		if (rv == CKR_OK)
+		{
+			OSObject* osobject = (OSObject*)handleManager->getObject(*phPublicKey);
+			if (osobject == NULL_PTR || !osobject->isValid())
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+			else if (osobject->startTransaction())
+			{
+				bool bOK = true;
+
+				// Common Attributes
+				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
+
+				// Hybrid KEM Public Key Attributes
+				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
+				ByteString pqcPub = pub->getPQCPublicKey();
+				ByteString classicalPub = pub->getClassicalPublicKey();
+
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PUBLIC_KEY, pqcPub);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PUBLIC_KEY, classicalPub);
+
+				if (bOK)
+					bOK = osobject->commitTransaction();
+				else
+					osobject->abortTransaction();
+
+				if (!bOK)
+					rv = CKR_FUNCTION_FAILED;
+			}
+			else
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+		}
+	}
+
+	// Create a private key using C_CreateObject
+	if (rv == CKR_OK)
+	{
+		const CK_ULONG maxAttribs = 32;
+		CK_OBJECT_CLASS privateKeyClass = CKO_PRIVATE_KEY;
+		CK_KEY_TYPE privateKeyType = CKK_VENDOR_HYBRID_KEM;
+		CK_ATTRIBUTE privateKeyAttribs[maxAttribs] = {
+			{ CKA_CLASS, &privateKeyClass, sizeof(privateKeyClass) },
+			{ CKA_TOKEN, &isPrivateKeyOnToken, sizeof(isPrivateKeyOnToken) },
+			{ CKA_PRIVATE, &isPrivateKeyPrivate, sizeof(isPrivateKeyPrivate) },
+			{ CKA_KEY_TYPE, &privateKeyType, sizeof(privateKeyType) },
+		};
+		CK_ULONG privateKeyAttribsCount = 4;
+		bool isPrivate = isPrivateKeyPrivate != CK_FALSE;
+
+		// Add the additional attributes
+		if (ulPrivateKeyAttributeCount > (maxAttribs - privateKeyAttribsCount))
+			rv = CKR_TEMPLATE_INCONSISTENT;
+		for (CK_ULONG i=0; i < ulPrivateKeyAttributeCount && rv == CKR_OK; ++i)
+		{
+			switch (pPrivateKeyTemplate[i].type)
+			{
+				case CKA_CLASS:
+				case CKA_TOKEN:
+				case CKA_PRIVATE:
+				case CKA_KEY_TYPE:
+					continue;
+				default:
+					privateKeyAttribs[privateKeyAttribsCount++] = pPrivateKeyTemplate[i];
+			}
+		}
+
+		if (rv == CKR_OK)
+			rv = this->CreateObject(hSession, privateKeyAttribs, privateKeyAttribsCount, phPrivateKey,OBJECT_OP_GENERATE);
+
+		// Store the attributes that are being supplied
+		if (rv == CKR_OK)
+		{
+			OSObject* osobject = (OSObject*)handleManager->getObject(*phPrivateKey);
+			if (osobject == NULL_PTR || !osobject->isValid())
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+			else if (osobject->startTransaction())
+			{
+				bool bOK = true;
+
+				// Common Attributes
+				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
+
+				// Hybrid KEM Private Key Attributes
+				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
+				ByteString pqcPriv = priv->getPQCPrivateKey();
+				ByteString classicalPriv = priv->getClassicalPrivateKey();
+
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PRIVATE_KEY, pqcPriv);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PRIVATE_KEY, classicalPriv);
+
+				if (bOK)
+					bOK = osobject->commitTransaction();
+				else
+					osobject->abortTransaction();
+
+				if (!bOK)
+					rv = CKR_FUNCTION_FAILED;
+			}
+			else
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+		}
+	}
+
+	// Clean up
+	hybridKEM.recycleKeyPair(kp);
+
+	// Remove public key if private key creation failed
+	if (rv != CKR_OK && *phPublicKey != CK_INVALID_HANDLE)
+	{
+		OSObject* obj = (OSObject*)handleManager->getObject(*phPublicKey);
+		handleManager->destroyObject(*phPublicKey);
+		if (obj) obj->destroyObject();
+		*phPublicKey = CK_INVALID_HANDLE;
+	}
+
+	return rv;
+}
+
+// Generate a Hybrid Signature key pair
+CK_RV SoftHSM::generateHybridSignature
+(
+	CK_SESSION_HANDLE hSession,
+	CK_MECHANISM_PTR pMechanism,
+	CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+	CK_ULONG ulPublicKeyAttributeCount,
+	CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+	CK_ULONG ulPrivateKeyAttributeCount,
+	CK_OBJECT_HANDLE_PTR phPublicKey,
+	CK_OBJECT_HANDLE_PTR phPrivateKey,
+	CK_BBOOL isPublicKeyOnToken,
+	CK_BBOOL isPublicKeyPrivate,
+	CK_BBOOL isPrivateKeyOnToken,
+	CK_BBOOL isPrivateKeyPrivate
+)
+{
+	*phPublicKey = CK_INVALID_HANDLE;
+	*phPrivateKey = CK_INVALID_HANDLE;
+
+	// Get the session
+	Session* session = (Session*)handleManager->getSession(hSession);
+	if (session == NULL)
+		return CKR_SESSION_HANDLE_INVALID;
+
+	// Get the token
+	Token* token = session->getToken();
+	if (token == NULL)
+		return CKR_GENERAL_ERROR;
+
+	// Set the parameters based on the mechanism
+	HybridSignatureParameters p;
+	p.setHybridMechanism(pMechanism->mechanism);
+
+	// Generate key pair using HybridSignature algorithm
+	AsymmetricKeyPair* kp = NULL;
+	HybridSignature hybridSig;
+	if (!hybridSig.generateKeyPair(&kp, &p))
+	{
+		ERROR_MSG("Could not generate Hybrid Signature key pair");
+		return CKR_GENERAL_ERROR;
+	}
+
+	HybridSignaturePublicKey* pub = (HybridSignaturePublicKey*) kp->getPublicKey();
+	HybridSignaturePrivateKey* priv = (HybridSignaturePrivateKey*) kp->getPrivateKey();
+
+	CK_RV rv = CKR_OK;
+
+	// Create a public key using C_CreateObject
+	if (rv == CKR_OK)
+	{
+		const CK_ULONG maxAttribs = 32;
+		CK_OBJECT_CLASS publicKeyClass = CKO_PUBLIC_KEY;
+		CK_KEY_TYPE publicKeyType = CKK_VENDOR_HYBRID_SIGNATURE;
+		CK_ATTRIBUTE publicKeyAttribs[maxAttribs] = {
+			{ CKA_CLASS, &publicKeyClass, sizeof(publicKeyClass) },
+			{ CKA_TOKEN, &isPublicKeyOnToken, sizeof(isPublicKeyOnToken) },
+			{ CKA_PRIVATE, &isPublicKeyPrivate, sizeof(isPublicKeyPrivate) },
+			{ CKA_KEY_TYPE, &publicKeyType, sizeof(publicKeyType) },
+		};
+		CK_ULONG publicKeyAttribsCount = 4;
+
+		// Add the additional attributes
+		if (ulPublicKeyAttributeCount > (maxAttribs - publicKeyAttribsCount))
+			rv = CKR_TEMPLATE_INCONSISTENT;
+		for (CK_ULONG i=0; i < ulPublicKeyAttributeCount && rv == CKR_OK; ++i)
+		{
+			switch (pPublicKeyTemplate[i].type)
+			{
+				case CKA_CLASS:
+				case CKA_TOKEN:
+				case CKA_PRIVATE:
+				case CKA_KEY_TYPE:
+					continue;
+				default:
+					publicKeyAttribs[publicKeyAttribsCount++] = pPublicKeyTemplate[i];
+			}
+		}
+
+		if (rv == CKR_OK)
+			rv = this->CreateObject(hSession, publicKeyAttribs, publicKeyAttribsCount, phPublicKey,OBJECT_OP_GENERATE);
+
+		// Store the attributes that are being supplied
+		if (rv == CKR_OK)
+		{
+			OSObject* osobject = (OSObject*)handleManager->getObject(*phPublicKey);
+			if (osobject == NULL_PTR || !osobject->isValid())
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+			else if (osobject->startTransaction())
+			{
+				bool bOK = true;
+
+				// Common Attributes
+				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
+
+				// Hybrid Signature Public Key Attributes
+				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
+				ByteString pqcPub = pub->getPQCPublicKey();
+				ByteString classicalPub = pub->getClassicalPublicKey();
+
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PUBLIC_KEY, pqcPub);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PUBLIC_KEY, classicalPub);
+
+				if (bOK)
+					bOK = osobject->commitTransaction();
+				else
+					osobject->abortTransaction();
+
+				if (!bOK)
+					rv = CKR_FUNCTION_FAILED;
+			}
+			else
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+		}
+	}
+
+	// Create a private key using C_CreateObject
+	if (rv == CKR_OK)
+	{
+		const CK_ULONG maxAttribs = 32;
+		CK_OBJECT_CLASS privateKeyClass = CKO_PRIVATE_KEY;
+		CK_KEY_TYPE privateKeyType = CKK_VENDOR_HYBRID_SIGNATURE;
+		CK_ATTRIBUTE privateKeyAttribs[maxAttribs] = {
+			{ CKA_CLASS, &privateKeyClass, sizeof(privateKeyClass) },
+			{ CKA_TOKEN, &isPrivateKeyOnToken, sizeof(isPrivateKeyOnToken) },
+			{ CKA_PRIVATE, &isPrivateKeyPrivate, sizeof(isPrivateKeyPrivate) },
+			{ CKA_KEY_TYPE, &privateKeyType, sizeof(privateKeyType) },
+		};
+		CK_ULONG privateKeyAttribsCount = 4;
+		bool isPrivate = isPrivateKeyPrivate != CK_FALSE;
+
+		// Add the additional attributes
+		if (ulPrivateKeyAttributeCount > (maxAttribs - privateKeyAttribsCount))
+			rv = CKR_TEMPLATE_INCONSISTENT;
+		for (CK_ULONG i=0; i < ulPrivateKeyAttributeCount && rv == CKR_OK; ++i)
+		{
+			switch (pPrivateKeyTemplate[i].type)
+			{
+				case CKA_CLASS:
+				case CKA_TOKEN:
+				case CKA_PRIVATE:
+				case CKA_KEY_TYPE:
+					continue;
+				default:
+					privateKeyAttribs[privateKeyAttribsCount++] = pPrivateKeyTemplate[i];
+			}
+		}
+
+		if (rv == CKR_OK)
+			rv = this->CreateObject(hSession, privateKeyAttribs, privateKeyAttribsCount, phPrivateKey,OBJECT_OP_GENERATE);
+
+		// Store the attributes that are being supplied
+		if (rv == CKR_OK)
+		{
+			OSObject* osobject = (OSObject*)handleManager->getObject(*phPrivateKey);
+			if (osobject == NULL_PTR || !osobject->isValid())
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+			else if (osobject->startTransaction())
+			{
+				bool bOK = true;
+
+				// Common Attributes
+				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
+
+				// Hybrid Signature Private Key Attributes
+				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
+				ByteString pqcPriv = priv->getPQCPrivateKey();
+				ByteString classicalPriv = priv->getClassicalPrivateKey();
+
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PRIVATE_KEY, pqcPriv);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PRIVATE_KEY, classicalPriv);
+
+				if (bOK)
+					bOK = osobject->commitTransaction();
+				else
+					osobject->abortTransaction();
+
+				if (!bOK)
+					rv = CKR_FUNCTION_FAILED;
+			}
+			else
+			{
+				rv = CKR_FUNCTION_FAILED;
+			}
+		}
+	}
+
+	// Clean up
+	hybridSig.recycleKeyPair(kp);
+
+	// Remove public key if private key creation failed
+	if (rv != CKR_OK && *phPublicKey != CK_INVALID_HANDLE)
+	{
+		OSObject* obj = (OSObject*)handleManager->getObject(*phPublicKey);
+		handleManager->destroyObject(*phPublicKey);
+		if (obj) obj->destroyObject();
+		*phPublicKey = CK_INVALID_HANDLE;
 	}
 
 	return rv;

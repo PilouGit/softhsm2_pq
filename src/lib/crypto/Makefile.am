@@ -157,7 +157,12 @@ libsofthsm_crypto_la_SOURCES +=	MLKEMPublicKey.cpp \
 				HybridKEMPublicKey.cpp \
 				HybridKEMPrivateKey.cpp \
 				HybridKEMKeyPair.cpp \
-				HybridKEM.cpp
+				HybridKEM.cpp \
+				HybridSignatureParameters.cpp \
+				HybridSignaturePublicKey.cpp \
+				HybridSignaturePrivateKey.cpp \
+				HybridSignatureKeyPair.cpp \
+				HybridSignature.cpp
 libsofthsm_crypto_la_LIBADD +=	@PQC_LIBS@
 AM_CPPFLAGS +=			@PQC_INCLUDES@
 endif

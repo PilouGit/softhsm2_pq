@@ -24,6 +24,7 @@ cryptotest_SOURCES =		cryptotest.cpp \
 				GOSTTests.cpp \
 				HashTests.cpp \
 				HybridKEMTests.cpp \
+				HybridSignatureTests.cpp \
 				MacTests.cpp \
 				MLDSATests.cpp \
 				MLKEMTests.cpp \
