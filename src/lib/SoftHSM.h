@@ -166,26 +166,26 @@ public:
 		CK_ULONG ulCount,
 		CK_OBJECT_HANDLE_PTR phKey
 	);
-	CK_RV C_Encapsulate
+	CK_RV C_EncapsulateKey
 	(
 		CK_SESSION_HANDLE hSession,
 		CK_MECHANISM_PTR pMechanism,
 		CK_OBJECT_HANDLE hPublicKey,
 		CK_ATTRIBUTE_PTR pTemplate,
 		CK_ULONG ulAttributeCount,
-		CK_OBJECT_HANDLE_PTR phKey,
 		CK_BYTE_PTR pEncapsulatedKey,
-		CK_ULONG_PTR pulEncapsulatedKeyLen
+		CK_ULONG_PTR pulEncapsulatedKeyLen,
+		CK_OBJECT_HANDLE_PTR phKey
 	);
-	CK_RV C_Decapsulate
+	CK_RV C_DecapsulateKey
 	(
 		CK_SESSION_HANDLE hSession,
 		CK_MECHANISM_PTR pMechanism,
 		CK_OBJECT_HANDLE hPrivateKey,
-		CK_BYTE_PTR pEncapsulatedKey,
-		CK_ULONG ulEncapsulatedKeyLen,
 		CK_ATTRIBUTE_PTR pTemplate,
 		CK_ULONG ulAttributeCount,
+		CK_BYTE_PTR pEncapsulatedKey,
+		CK_ULONG ulEncapsulatedKeyLen,
 		CK_OBJECT_HANDLE_PTR phKey
 	);
 	CK_RV C_SeedRandom(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pSeed, CK_ULONG ulSeedLen);

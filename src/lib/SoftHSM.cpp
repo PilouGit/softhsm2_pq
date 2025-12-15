@@ -242,23 +242,29 @@ static CK_RV extractObjectInformation(CK_ATTRIBUTE_PTR pTemplate,
 	bool bHasCertType = false;
 	bool bHasPrivate = false;
 
+	printf("DEBUG extractObjectInformation: ulCount=%lu, bImplicit=%d, objClass=0x%08lX, keyType=0x%08lX\n", ulCount, bImplicit, objClass, keyType);
+
 	// Extract object information
 	for (CK_ULONG i = 0; i < ulCount; ++i)
 	{
 		switch (pTemplate[i].type)
 		{
 			case CKA_CLASS:
+				printf("DEBUG: CKA_CLASS found, ulValueLen=%lu, expected=%lu\n", pTemplate[i].ulValueLen, sizeof(CK_OBJECT_CLASS));
 				if (pTemplate[i].ulValueLen == sizeof(CK_OBJECT_CLASS))
 				{
 					objClass = *(CK_OBJECT_CLASS_PTR)pTemplate[i].pValue;
 					bHasClass = true;
+					printf("DEBUG: CKA_CLASS extracted: objClass=0x%08lX\n", objClass);
 				}
 				break;
 			case CKA_KEY_TYPE:
+				printf("DEBUG: CKA_KEY_TYPE found, ulValueLen=%lu, expected=%lu\n", pTemplate[i].ulValueLen, sizeof(CK_KEY_TYPE));
 				if (pTemplate[i].ulValueLen == sizeof(CK_KEY_TYPE))
 				{
 					keyType = *(CK_KEY_TYPE*)pTemplate[i].pValue;
 					bHasKeyType = true;
+					printf("DEBUG: CKA_KEY_TYPE extracted: keyType=0x%08lX\n", keyType);
 				}
 				break;
 			case CKA_CERTIFICATE_TYPE:
@@ -1365,6 +1371,21 @@ CK_RV SoftHSM::C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_
 			pInfo->ulMinKeySize = 44;
 			pInfo->ulMaxKeySize = 87;
 			pInfo->flags = CKF_SIGN | CKF_VERIFY;
+			break;
+		// Hybrid KEM mechanisms
+		case CKM_VENDOR_MLKEM768_ECDH_P256:
+		case CKM_VENDOR_MLKEM1024_ECDH_P384:
+		case CKM_VENDOR_MLKEM768_X25519:
+			pInfo->ulMinKeySize = 768;
+			pInfo->ulMaxKeySize = 1024;
+			pInfo->flags = CKF_GENERATE_KEY_PAIR;
+			break;
+		// Hybrid signature mechanisms
+		case CKM_VENDOR_MLDSA65_ECDSA_P256:
+		case CKM_VENDOR_MLDSA87_ECDSA_P384:
+			pInfo->ulMinKeySize = 65;
+			pInfo->ulMaxKeySize = 87;
+			pInfo->flags = CKF_GENERATE_KEY_PAIR | CKF_SIGN | CKF_VERIFY;
 			break;
 #endif
 	    case CKM_CONCATENATE_DATA_AND_BASE:
@@ -4206,6 +4227,9 @@ CK_RV SoftHSM::AsymSignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechan
 #ifdef WITH_EDDSA
 	bool isEDDSA = false;
 #endif
+#ifdef WITH_PQC
+	bool isHybridSignature = false;
+#endif
 	switch(pMechanism->mechanism) {
 		case CKM_RSA_PKCS:
 			mechanism = AsymMech::RSA_PKCS;
@@ -4472,6 +4496,14 @@ CK_RV SoftHSM::AsymSignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechan
 			isEDDSA = true;
 			break;
 #endif
+#ifdef WITH_PQC
+		case CKM_VENDOR_MLDSA65_ECDSA_P256:
+		case CKM_VENDOR_MLDSA87_ECDSA_P384:
+			mechanism = AsymMech::ECDSA;  // Placeholder mechanism
+			bAllowMultiPartOp = false;
+			isHybridSignature = true;
+			break;
+#endif
 		default:
 			return CKR_MECHANISM_INVALID;
 	}
@@ -4554,6 +4586,83 @@ CK_RV SoftHSM::AsymSignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechan
 		{
 			asymCrypto->recyclePrivateKey(privateKey);
 			CryptoFactory::i()->recycleAsymmetricAlgorithm(asymCrypto);
+			return CKR_GENERAL_ERROR;
+		}
+	}
+#endif
+#ifdef WITH_PQC
+	else if (isHybridSignature)
+	{
+		// Create HybridSignature object
+		asymCrypto = new HybridSignature();
+		if (asymCrypto == NULL) return CKR_MECHANISM_INVALID;
+
+		privateKey = asymCrypto->newPrivateKey();
+		if (privateKey == NULL)
+		{
+			delete asymCrypto;
+			return CKR_HOST_MEMORY;
+		}
+
+		// Get the serialized private key from object store
+		ByteString serialized;
+
+		// Get hybrid mechanism
+		CK_MECHANISM_TYPE hybridMech = key->getUnsignedLongValue(CKA_VENDOR_HYBRID_MECHANISM, 0);
+		ByteString mechBytes(sizeof(CK_MECHANISM_TYPE));
+		memcpy(&mechBytes[0], &hybridMech, sizeof(CK_MECHANISM_TYPE));
+		serialized = mechBytes.serialise();
+
+		// Get ML-DSA parameter set
+		CK_ULONG mldsaParamSet = 65;  // Default
+		if (hybridMech == CKM_VENDOR_MLDSA87_ECDSA_P384)
+			mldsaParamSet = 87;
+		ByteString paramSetBytes(sizeof(CK_ULONG));
+		memcpy(&paramSetBytes[0], &mldsaParamSet, sizeof(CK_ULONG));
+		serialized = serialized + paramSetBytes.serialise();
+
+		// Get EC curve
+		ByteString ecCurve;
+		if (hybridMech == CKM_VENDOR_MLDSA65_ECDSA_P256)
+			ecCurve = ByteString((const unsigned char*)"secp256r1", 9);
+		else if (hybridMech == CKM_VENDOR_MLDSA87_ECDSA_P384)
+			ecCurve = ByteString((const unsigned char*)"secp384r1", 9);
+		serialized = serialized + ecCurve.serialise();
+
+		// Get PQC and classical private keys
+		ByteString pqcPrivKeyData;
+		ByteString classicalPrivKeyData;
+
+		if (key->getBooleanValue(CKA_PRIVATE, true))
+		{
+			if (!token->decrypt(key->getByteStringValue(CKA_VENDOR_PQC_PRIVATE_KEY), pqcPrivKeyData))
+			{
+				delete privateKey;
+				delete asymCrypto;
+				return CKR_GENERAL_ERROR;
+			}
+			if (!token->decrypt(key->getByteStringValue(CKA_VENDOR_CLASSICAL_PRIVATE_KEY), classicalPrivKeyData))
+			{
+				delete privateKey;
+				delete asymCrypto;
+				return CKR_GENERAL_ERROR;
+			}
+		}
+		else
+		{
+			pqcPrivKeyData = key->getByteStringValue(CKA_VENDOR_PQC_PRIVATE_KEY);
+			classicalPrivKeyData = key->getByteStringValue(CKA_VENDOR_CLASSICAL_PRIVATE_KEY);
+		}
+
+		// Add keys to serialization
+		serialized = serialized + pqcPrivKeyData.serialise() + classicalPrivKeyData.serialise();
+
+		// Deserialize into private key
+		HybridSignaturePrivateKey* hybridPrivKey = dynamic_cast<HybridSignaturePrivateKey*>(privateKey);
+		if (hybridPrivKey == NULL || !hybridPrivKey->deserialise(serialized))
+		{
+			delete privateKey;
+			delete asymCrypto;
 			return CKR_GENERAL_ERROR;
 		}
 	}
@@ -5209,6 +5318,9 @@ CK_RV SoftHSM::AsymVerifyInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMech
 #ifdef WITH_EDDSA
 	bool isEDDSA = false;
 #endif
+#ifdef WITH_PQC
+	bool isHybridSignature = false;
+#endif
 	switch(pMechanism->mechanism) {
 		case CKM_RSA_PKCS:
 			mechanism = AsymMech::RSA_PKCS;
@@ -5473,6 +5585,14 @@ CK_RV SoftHSM::AsymVerifyInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMech
 			isEDDSA = true;
 			break;
 #endif
+#ifdef WITH_PQC
+		case CKM_VENDOR_MLDSA65_ECDSA_P256:
+		case CKM_VENDOR_MLDSA87_ECDSA_P384:
+			mechanism = AsymMech::ECDSA;  // Placeholder mechanism
+			bAllowMultiPartOp = false;
+			isHybridSignature = true;
+			break;
+#endif
 		default:
 			return CKR_MECHANISM_INVALID;
 	}
@@ -5555,6 +5675,83 @@ CK_RV SoftHSM::AsymVerifyInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMech
 		{
 			asymCrypto->recyclePublicKey(publicKey);
 			CryptoFactory::i()->recycleAsymmetricAlgorithm(asymCrypto);
+			return CKR_GENERAL_ERROR;
+		}
+	}
+#endif
+#ifdef WITH_PQC
+	else if (isHybridSignature)
+	{
+		// Create HybridSignature object
+		asymCrypto = new HybridSignature();
+		if (asymCrypto == NULL) return CKR_MECHANISM_INVALID;
+
+		publicKey = asymCrypto->newPublicKey();
+		if (publicKey == NULL)
+		{
+			delete asymCrypto;
+			return CKR_HOST_MEMORY;
+		}
+
+		// Get the serialized public key from object store
+		ByteString serialized;
+
+		// Get hybrid mechanism
+		CK_MECHANISM_TYPE hybridMech = key->getUnsignedLongValue(CKA_VENDOR_HYBRID_MECHANISM, 0);
+		ByteString mechBytes(sizeof(CK_MECHANISM_TYPE));
+		memcpy(&mechBytes[0], &hybridMech, sizeof(CK_MECHANISM_TYPE));
+		serialized = mechBytes.serialise();
+
+		// Get ML-DSA parameter set
+		CK_ULONG mldsaParamSet = 65;  // Default
+		if (hybridMech == CKM_VENDOR_MLDSA87_ECDSA_P384)
+			mldsaParamSet = 87;
+		ByteString paramSetBytes(sizeof(CK_ULONG));
+		memcpy(&paramSetBytes[0], &mldsaParamSet, sizeof(CK_ULONG));
+		serialized = serialized + paramSetBytes.serialise();
+
+		// Get EC curve
+		ByteString ecCurve;
+		if (hybridMech == CKM_VENDOR_MLDSA65_ECDSA_P256)
+			ecCurve = ByteString((const unsigned char*)"secp256r1", 9);
+		else if (hybridMech == CKM_VENDOR_MLDSA87_ECDSA_P384)
+			ecCurve = ByteString((const unsigned char*)"secp384r1", 9);
+		serialized = serialized + ecCurve.serialise();
+
+		// Get PQC and classical public keys
+		ByteString pqcPubKeyData;
+		ByteString classicalPubKeyData;
+
+		if (key->getBooleanValue(CKA_PRIVATE, false))
+		{
+			if (!token->decrypt(key->getByteStringValue(CKA_VENDOR_PQC_PUBLIC_KEY), pqcPubKeyData))
+			{
+				delete publicKey;
+				delete asymCrypto;
+				return CKR_GENERAL_ERROR;
+			}
+			if (!token->decrypt(key->getByteStringValue(CKA_VENDOR_CLASSICAL_PUBLIC_KEY), classicalPubKeyData))
+			{
+				delete publicKey;
+				delete asymCrypto;
+				return CKR_GENERAL_ERROR;
+			}
+		}
+		else
+		{
+			pqcPubKeyData = key->getByteStringValue(CKA_VENDOR_PQC_PUBLIC_KEY);
+			classicalPubKeyData = key->getByteStringValue(CKA_VENDOR_CLASSICAL_PUBLIC_KEY);
+		}
+
+		// Add keys to serialization
+		serialized = serialized + pqcPubKeyData.serialise() + classicalPubKeyData.serialise();
+
+		// Deserialize into public key
+		HybridSignaturePublicKey* hybridPubKey = dynamic_cast<HybridSignaturePublicKey*>(publicKey);
+		if (hybridPubKey == NULL || !hybridPubKey->deserialise(serialized))
+		{
+			delete publicKey;
+			delete asymCrypto;
 			return CKR_GENERAL_ERROR;
 		}
 	}
@@ -6129,6 +6326,8 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	CK_OBJECT_HANDLE_PTR phPrivateKey
 )
 {
+	printf("DEBUG C_GenerateKeyPair: ENTRY - mechanism=0x%08lX\n", pMechanism ? pMechanism->mechanism : 0xFFFFFFFF);
+
 	if (!isInitialised) return CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (pMechanism == NULL_PTR) return CKR_ARGUMENTS_BAD;
@@ -6196,11 +6395,17 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	CK_BBOOL ispublicKeyToken = CK_FALSE;
 	CK_BBOOL ispublicKeyPrivate = CK_FALSE;
 	bool isPublicKeyImplicit = true;
+	printf("DEBUG: Before extractObjectInformation - publicKeyClass=0x%08lX, keyType=0x%08lX, mechanism=0x%08lX\n", publicKeyClass, keyType, pMechanism->mechanism);
 	extractObjectInformation(pPublicKeyTemplate, ulPublicKeyAttributeCount, publicKeyClass, keyType, dummy, ispublicKeyToken, ispublicKeyPrivate, isPublicKeyImplicit);
+	printf("DEBUG: After extractObjectInformation - publicKeyClass=0x%08lX, keyType=0x%08lX\n", publicKeyClass, keyType);
 
 	// Report errors caused by accidental template mix-ups in the application using this cryptoki lib.
 	if (publicKeyClass != CKO_PUBLIC_KEY)
+	{
+		printf("ERROR: Public key class mismatch: got 0x%08lX, expected CKO_PUBLIC_KEY (0x%08lX)\n", publicKeyClass, CKO_PUBLIC_KEY);
+		ERROR_MSG("Public key class mismatch: got 0x%08lX, expected CKO_PUBLIC_KEY (0x%08lX)", publicKeyClass, CKO_PUBLIC_KEY);
 		return CKR_ATTRIBUTE_VALUE_INVALID;
+	}
 	if (pMechanism->mechanism == CKM_RSA_PKCS_KEY_PAIR_GEN && keyType != CKK_RSA)
 		return CKR_TEMPLATE_INCONSISTENT;
 	if (pMechanism->mechanism == CKM_DSA_KEY_PAIR_GEN && keyType != CKK_DSA)
@@ -6257,10 +6462,13 @@ CK_RV SoftHSM::C_GenerateKeyPair
 		return CKR_TEMPLATE_INCONSISTENT;
 #endif
 
+	printf("DEBUG C_GenerateKeyPair: All template checks passed, mechanism=0x%08lX, keyType=0x%08lX\n", pMechanism->mechanism, keyType);
+
 	// Check user credentials
 	CK_RV rv = haveWrite(session->getState(), ispublicKeyToken || isprivateKeyToken, ispublicKeyPrivate || isprivateKeyPrivate);
 	if (rv != CKR_OK)
 	{
+		printf("DEBUG C_GenerateKeyPair: haveWrite failed with rv=0x%08lX\n", rv);
 		if (rv == CKR_USER_NOT_LOGGED_IN)
 			INFO_MSG("User is not authorized");
 		if (rv == CKR_SESSION_READ_ONLY)
@@ -6268,6 +6476,7 @@ CK_RV SoftHSM::C_GenerateKeyPair
 
 		return rv;
 	}
+	printf("DEBUG C_GenerateKeyPair: User credentials OK\n");
 
 	// Generate RSA keys
 	if (pMechanism->mechanism == CKM_RSA_PKCS_KEY_PAIR_GEN)
@@ -6353,6 +6562,7 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	// Generate Hybrid KEM keys
 	if (IS_HYBRID_KEM_MECHANISM(pMechanism->mechanism))
 	{
+			printf("DEBUG C_GenerateKeyPair: Calling generateHybridKEM for mechanism 0x%08lX\n", pMechanism->mechanism);
 			return this->generateHybridKEM(hSession,
 									 pMechanism,
 									 pPublicKeyTemplate, ulPublicKeyAttributeCount,
@@ -6364,6 +6574,7 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	// Generate Hybrid Signature keys
 	if (IS_HYBRID_SIGNATURE_MECHANISM(pMechanism->mechanism))
 	{
+			printf("DEBUG C_GenerateKeyPair: Calling generateHybridSignature for mechanism 0x%08lX\n", pMechanism->mechanism);
 			return this->generateHybridSignature(hSession,
 									 pMechanism,
 									 pPublicKeyTemplate, ulPublicKeyAttributeCount,
@@ -6373,6 +6584,7 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	}
 #endif
 
+	printf("DEBUG C_GenerateKeyPair: Reached end of function, returning CKR_GENERAL_ERROR\n");
 	return CKR_GENERAL_ERROR;
 }
 
@@ -7898,24 +8110,24 @@ CK_RV SoftHSM::C_DeriveKey
 
 #ifdef WITH_PQC
 // Encapsulate a key using ML-KEM
-CK_RV SoftHSM::C_Encapsulate
+CK_RV SoftHSM::C_EncapsulateKey
 (
 	CK_SESSION_HANDLE hSession,
 	CK_MECHANISM_PTR pMechanism,
 	CK_OBJECT_HANDLE hPublicKey,
 	CK_ATTRIBUTE_PTR pTemplate,
 	CK_ULONG ulAttributeCount,
-	CK_OBJECT_HANDLE_PTR phKey,
 	CK_BYTE_PTR pEncapsulatedKey,
-	CK_ULONG_PTR pulEncapsulatedKeyLen
+	CK_ULONG_PTR pulEncapsulatedKeyLen,
+	CK_OBJECT_HANDLE_PTR phKey
 )
 {
 	if (!isInitialised) return CKR_CRYPTOKI_NOT_INITIALIZED;
 	if (pMechanism == NULL_PTR) return CKR_ARGUMENTS_BAD;
 	if (pulEncapsulatedKeyLen == NULL_PTR) return CKR_ARGUMENTS_BAD;
 
-	// Only ML-KEM is supported for encapsulation
-	if (pMechanism->mechanism != CKM_ML_KEM)
+	// ML-KEM and Hybrid KEM are supported for encapsulation
+	if (pMechanism->mechanism != CKM_ML_KEM && !IS_HYBRID_KEM_MECHANISM(pMechanism->mechanism))
 		return CKR_MECHANISM_INVALID;
 
 	// Get the session
@@ -7938,48 +8150,115 @@ CK_RV SoftHSM::C_Encapsulate
 	if (keyClass != CKO_PUBLIC_KEY)
 		return CKR_KEY_TYPE_INCONSISTENT;
 
-	// Check that it's an ML-KEM key
+	// Check that it's an ML-KEM or Hybrid KEM key
 	CK_KEY_TYPE keyType = publicKeyObj->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED);
-	if (keyType != CKK_ML_KEM)
+	if (keyType != CKK_ML_KEM && keyType != CKK_VENDOR_HYBRID_KEM)
 		return CKR_KEY_TYPE_INCONSISTENT;
 
-	// Get the ML-KEM public key
-	AsymmetricAlgorithm* mlkem = OQSCryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::MLKEM);
-	if (mlkem == NULL)
-		return CKR_GENERAL_ERROR;
+	ByteString ciphertext;
+	ByteString sharedSecret;
 
-	// Reconstruct the public key from the object
-	ByteString publicKeyData;
-	if (publicKeyObj->getBooleanValue(CKA_PRIVATE, false))
+	// Handle Hybrid KEM keys
+	if (keyType == CKK_VENDOR_HYBRID_KEM)
 	{
-		bool bOK = token->decrypt(publicKeyObj->getByteStringValue(CKA_VALUE), publicKeyData);
-		if (!bOK)
+		// Get hybrid mechanism and parameters
+		CK_MECHANISM_TYPE hybridMech = publicKeyObj->getUnsignedLongValue(CKA_VENDOR_HYBRID_MECHANISM, 0);
+
+		// Get PQC and classical public keys
+		ByteString pqcPubKeyData;
+		ByteString classicalPubKeyData;
+
+		if (publicKeyObj->getBooleanValue(CKA_PRIVATE, false))
+		{
+			if (!token->decrypt(publicKeyObj->getByteStringValue(CKA_VENDOR_PQC_PUBLIC_KEY), pqcPubKeyData))
+				return CKR_GENERAL_ERROR;
+			if (!token->decrypt(publicKeyObj->getByteStringValue(CKA_VENDOR_CLASSICAL_PUBLIC_KEY), classicalPubKeyData))
+				return CKR_GENERAL_ERROR;
+		}
+		else
+		{
+			pqcPubKeyData = publicKeyObj->getByteStringValue(CKA_VENDOR_PQC_PUBLIC_KEY);
+			classicalPubKeyData = publicKeyObj->getByteStringValue(CKA_VENDOR_CLASSICAL_PUBLIC_KEY);
+		}
+
+		// Reconstruct hybrid public key
+		HybridKEMPublicKey hybridPubKey;
+		ByteString serialized;
+
+		// Serialize mechanism
+		ByteString mechBytes(sizeof(CK_MECHANISM_TYPE));
+		memcpy(&mechBytes[0], &hybridMech, sizeof(CK_MECHANISM_TYPE));
+		serialized = mechBytes.serialise();
+
+		// Add parameter set based on mechanism
+		CK_ULONG mlkemParamSet = 768; // Default
+		if (hybridMech == CKM_VENDOR_MLKEM1024_ECDH_P384)
+			mlkemParamSet = 1024;
+		ByteString paramSetBytes(sizeof(CK_ULONG));
+		memcpy(&paramSetBytes[0], &mlkemParamSet, sizeof(CK_ULONG));
+		serialized = serialized + paramSetBytes.serialise();
+
+		// Add EC curve
+		ByteString ecCurve;
+		if (hybridMech == CKM_VENDOR_MLKEM768_ECDH_P256)
+			ecCurve = ByteString((const unsigned char*)"secp256r1", 9);
+		else if (hybridMech == CKM_VENDOR_MLKEM1024_ECDH_P384)
+			ecCurve = ByteString((const unsigned char*)"secp384r1", 9);
+		else if (hybridMech == CKM_VENDOR_MLKEM768_X25519)
+			ecCurve = ByteString((const unsigned char*)"X25519", 6);
+		serialized = serialized + ecCurve.serialise();
+
+		// Add keys
+		serialized = serialized + pqcPubKeyData.serialise() + classicalPubKeyData.serialise();
+
+		if (!hybridPubKey.deserialise(serialized))
+			return CKR_GENERAL_ERROR;
+
+		// Perform encapsulation
+		HybridKEM hybridKEM;
+		if (!hybridKEM.encapsulate(&hybridPubKey, ciphertext, sharedSecret))
+		{
+			return CKR_GENERAL_ERROR;
+		}
+	}
+	else // Handle regular ML-KEM keys
+	{
+		// Get the ML-KEM public key
+		AsymmetricAlgorithm* mlkem = OQSCryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::MLKEM);
+		if (mlkem == NULL)
+			return CKR_GENERAL_ERROR;
+
+		// Reconstruct the public key from the object
+		ByteString publicKeyData;
+		if (publicKeyObj->getBooleanValue(CKA_PRIVATE, false))
+		{
+			bool bOK = token->decrypt(publicKeyObj->getByteStringValue(CKA_VALUE), publicKeyData);
+			if (!bOK)
+			{
+				OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
+				return CKR_GENERAL_ERROR;
+			}
+		}
+		else
+		{
+			publicKeyData = publicKeyObj->getByteStringValue(CKA_VALUE);
+		}
+
+		unsigned long paramSet = publicKeyObj->getUnsignedLongValue(CKA_VALUE_LEN, 0);
+		MLKEMPublicKey pubKey;
+		pubKey.setParameterSet(paramSet);
+		pubKey.setPublicKey(publicKeyData);
+
+		// Perform encapsulation
+		OQSMLKEM* mlkemAlg = dynamic_cast<OQSMLKEM*>(mlkem);
+		if (mlkemAlg == NULL || !mlkemAlg->encapsulate(&pubKey, ciphertext, sharedSecret))
 		{
 			OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 			return CKR_GENERAL_ERROR;
 		}
-	}
-	else
-	{
-		publicKeyData = publicKeyObj->getByteStringValue(CKA_VALUE);
-	}
 
-	unsigned long paramSet = publicKeyObj->getUnsignedLongValue(CKA_VALUE_LEN, 0);
-	MLKEMPublicKey pubKey;
-	pubKey.setParameterSet(paramSet);
-	pubKey.setPublicKey(publicKeyData);
-
-	// Perform encapsulation
-	ByteString ciphertext;
-	ByteString sharedSecret;
-	OQSMLKEM* mlkemAlg = dynamic_cast<OQSMLKEM*>(mlkem);
-	if (mlkemAlg == NULL || !mlkemAlg->encapsulate(&pubKey, ciphertext, sharedSecret))
-	{
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
-		return CKR_GENERAL_ERROR;
 	}
-
-	OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 
 	// Return ciphertext length or ciphertext
 	if (pEncapsulatedKey == NULL_PTR)
@@ -8093,15 +8372,15 @@ CK_RV SoftHSM::C_Encapsulate
 }
 
 // Decapsulate a key using ML-KEM
-CK_RV SoftHSM::C_Decapsulate
+CK_RV SoftHSM::C_DecapsulateKey
 (
 	CK_SESSION_HANDLE hSession,
 	CK_MECHANISM_PTR pMechanism,
 	CK_OBJECT_HANDLE hPrivateKey,
-	CK_BYTE_PTR pEncapsulatedKey,
-	CK_ULONG ulEncapsulatedKeyLen,
 	CK_ATTRIBUTE_PTR pTemplate,
 	CK_ULONG ulAttributeCount,
+	CK_BYTE_PTR pEncapsulatedKey,
+	CK_ULONG ulEncapsulatedKeyLen,
 	CK_OBJECT_HANDLE_PTR phKey
 )
 {
@@ -8110,8 +8389,8 @@ CK_RV SoftHSM::C_Decapsulate
 	if (pEncapsulatedKey == NULL_PTR) return CKR_ARGUMENTS_BAD;
 	if (phKey == NULL_PTR) return CKR_ARGUMENTS_BAD;
 
-	// Only ML-KEM is supported for decapsulation
-	if (pMechanism->mechanism != CKM_ML_KEM)
+	// ML-KEM and Hybrid KEM are supported for decapsulation
+	if (pMechanism->mechanism != CKM_ML_KEM && !IS_HYBRID_KEM_MECHANISM(pMechanism->mechanism))
 		return CKR_MECHANISM_INVALID;
 
 	// Get the session
@@ -8134,48 +8413,115 @@ CK_RV SoftHSM::C_Decapsulate
 	if (keyClass != CKO_PRIVATE_KEY)
 		return CKR_KEY_TYPE_INCONSISTENT;
 
-	// Check that it's an ML-KEM key
+	// Check that it's an ML-KEM or Hybrid KEM key
 	CK_KEY_TYPE keyType = privateKeyObj->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED);
-	if (keyType != CKK_ML_KEM)
+	if (keyType != CKK_ML_KEM && keyType != CKK_VENDOR_HYBRID_KEM)
 		return CKR_KEY_TYPE_INCONSISTENT;
 
-	// Get the ML-KEM private key
-	AsymmetricAlgorithm* mlkem = OQSCryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::MLKEM);
-	if (mlkem == NULL)
-		return CKR_GENERAL_ERROR;
+	ByteString ciphertext(pEncapsulatedKey, ulEncapsulatedKeyLen);
+	ByteString sharedSecret;
 
-	// Reconstruct the private key from the object
-	ByteString privateKeyData;
-	if (privateKeyObj->getBooleanValue(CKA_PRIVATE, true))
+	// Handle Hybrid KEM keys
+	if (keyType == CKK_VENDOR_HYBRID_KEM)
 	{
-		bool bOK = token->decrypt(privateKeyObj->getByteStringValue(CKA_VALUE), privateKeyData);
-		if (!bOK)
+		// Get hybrid mechanism and parameters
+		CK_MECHANISM_TYPE hybridMech = privateKeyObj->getUnsignedLongValue(CKA_VENDOR_HYBRID_MECHANISM, 0);
+
+		// Get PQC and classical private keys
+		ByteString pqcPrivKeyData;
+		ByteString classicalPrivKeyData;
+
+		if (privateKeyObj->getBooleanValue(CKA_PRIVATE, true))
+		{
+			if (!token->decrypt(privateKeyObj->getByteStringValue(CKA_VENDOR_PQC_PRIVATE_KEY), pqcPrivKeyData))
+				return CKR_GENERAL_ERROR;
+			if (!token->decrypt(privateKeyObj->getByteStringValue(CKA_VENDOR_CLASSICAL_PRIVATE_KEY), classicalPrivKeyData))
+				return CKR_GENERAL_ERROR;
+		}
+		else
+		{
+			pqcPrivKeyData = privateKeyObj->getByteStringValue(CKA_VENDOR_PQC_PRIVATE_KEY);
+			classicalPrivKeyData = privateKeyObj->getByteStringValue(CKA_VENDOR_CLASSICAL_PRIVATE_KEY);
+		}
+
+		// Reconstruct hybrid private key
+		HybridKEMPrivateKey hybridPrivKey;
+		ByteString serialized;
+
+		// Serialize mechanism
+		ByteString mechBytes(sizeof(CK_MECHANISM_TYPE));
+		memcpy(&mechBytes[0], &hybridMech, sizeof(CK_MECHANISM_TYPE));
+		serialized = mechBytes.serialise();
+
+		// Add parameter set based on mechanism
+		CK_ULONG mlkemParamSet = 768; // Default
+		if (hybridMech == CKM_VENDOR_MLKEM1024_ECDH_P384)
+			mlkemParamSet = 1024;
+		ByteString paramSetBytes(sizeof(CK_ULONG));
+		memcpy(&paramSetBytes[0], &mlkemParamSet, sizeof(CK_ULONG));
+		serialized = serialized + paramSetBytes.serialise();
+
+		// Add EC curve
+		ByteString ecCurve;
+		if (hybridMech == CKM_VENDOR_MLKEM768_ECDH_P256)
+			ecCurve = ByteString((const unsigned char*)"secp256r1", 9);
+		else if (hybridMech == CKM_VENDOR_MLKEM1024_ECDH_P384)
+			ecCurve = ByteString((const unsigned char*)"secp384r1", 9);
+		else if (hybridMech == CKM_VENDOR_MLKEM768_X25519)
+			ecCurve = ByteString((const unsigned char*)"X25519", 6);
+		serialized = serialized + ecCurve.serialise();
+
+		// Add keys
+		serialized = serialized + pqcPrivKeyData.serialise() + classicalPrivKeyData.serialise();
+
+		if (!hybridPrivKey.deserialise(serialized))
+			return CKR_GENERAL_ERROR;
+
+		// Perform decapsulation
+		HybridKEM hybridKEM;
+		if (!hybridKEM.decapsulate(&hybridPrivKey, ciphertext, sharedSecret))
+		{
+			return CKR_GENERAL_ERROR;
+		}
+	}
+	else // Handle regular ML-KEM keys
+	{
+		// Get the ML-KEM private key
+		AsymmetricAlgorithm* mlkem = OQSCryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::MLKEM);
+		if (mlkem == NULL)
+			return CKR_GENERAL_ERROR;
+
+		// Reconstruct the private key from the object
+		ByteString privateKeyData;
+		if (privateKeyObj->getBooleanValue(CKA_PRIVATE, true))
+		{
+			bool bOK = token->decrypt(privateKeyObj->getByteStringValue(CKA_VALUE), privateKeyData);
+			if (!bOK)
+			{
+				OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
+				return CKR_GENERAL_ERROR;
+			}
+		}
+		else
+		{
+			privateKeyData = privateKeyObj->getByteStringValue(CKA_VALUE);
+		}
+
+		unsigned long paramSet = privateKeyObj->getUnsignedLongValue(CKA_VALUE_LEN, 0);
+		MLKEMPrivateKey privKey;
+		privKey.setParameterSet(paramSet);
+		privKey.setPrivateKey(privateKeyData);
+
+		// Perform decapsulation
+		OQSMLKEM* mlkemAlg = dynamic_cast<OQSMLKEM*>(mlkem);
+		if (mlkemAlg == NULL || !mlkemAlg->decapsulate(&privKey, ciphertext, sharedSecret))
 		{
 			OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 			return CKR_GENERAL_ERROR;
 		}
-	}
-	else
-	{
-		privateKeyData = privateKeyObj->getByteStringValue(CKA_VALUE);
-	}
 
-	unsigned long paramSet = privateKeyObj->getUnsignedLongValue(CKA_VALUE_LEN, 0);
-	MLKEMPrivateKey privKey;
-	privKey.setParameterSet(paramSet);
-	privKey.setPrivateKey(privateKeyData);
-
-	// Perform decapsulation
-	ByteString ciphertext(pEncapsulatedKey, ulEncapsulatedKeyLen);
-	ByteString sharedSecret;
-	OQSMLKEM* mlkemAlg = dynamic_cast<OQSMLKEM*>(mlkem);
-	if (mlkemAlg == NULL || !mlkemAlg->decapsulate(&privKey, ciphertext, sharedSecret))
-	{
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
-		return CKR_GENERAL_ERROR;
 	}
-
-	OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 
 	// Extract key attributes from template
 	CK_OBJECT_CLASS newKeyClass = CKO_SECRET_KEY;
@@ -11677,11 +12023,14 @@ CK_RV SoftHSM::generateHybridKEM
 	// Generate key pair using HybridKEM algorithm
 	AsymmetricKeyPair* kp = NULL;
 	HybridKEM hybridKEM;
+	printf("DEBUG generateHybridKEM: About to generate key pair for mechanism 0x%08lX\n", pMechanism->mechanism);
 	if (!hybridKEM.generateKeyPair(&kp, &p))
 	{
+		printf("ERROR: hybridKEM.generateKeyPair() failed\n");
 		ERROR_MSG("Could not generate Hybrid KEM key pair");
 		return CKR_GENERAL_ERROR;
 	}
+	printf("DEBUG generateHybridKEM: Key pair generated successfully\n");
 
 	HybridKEMPublicKey* pub = (HybridKEMPublicKey*) kp->getPublicKey();
 	HybridKEMPrivateKey* priv = (HybridKEMPrivateKey*) kp->getPrivateKey();
@@ -11719,8 +12068,10 @@ CK_RV SoftHSM::generateHybridKEM
 			}
 		}
 
+		printf("DEBUG generateHybridKEM: About to call CreateObject for public key, attribsCount=%lu, rv=0x%08lX\n", publicKeyAttribsCount, rv);
 		if (rv == CKR_OK)
 			rv = this->CreateObject(hSession, publicKeyAttribs, publicKeyAttribsCount, phPublicKey,OBJECT_OP_GENERATE);
+		printf("DEBUG generateHybridKEM: CreateObject for public key returned rv=0x%08lX\n", rv);
 
 		// Store the attributes that are being supplied
 		if (rv == CKR_OK)
@@ -11774,7 +12125,6 @@ CK_RV SoftHSM::generateHybridKEM
 			{ CKA_KEY_TYPE, &privateKeyType, sizeof(privateKeyType) },
 		};
 		CK_ULONG privateKeyAttribsCount = 4;
-		bool isPrivate = isPrivateKeyPrivate != CK_FALSE;
 
 		// Add the additional attributes
 		if (ulPrivateKeyAttributeCount > (maxAttribs - privateKeyAttribsCount))
@@ -11984,7 +12334,6 @@ CK_RV SoftHSM::generateHybridSignature
 			{ CKA_KEY_TYPE, &privateKeyType, sizeof(privateKeyType) },
 		};
 		CK_ULONG privateKeyAttribsCount = 4;
-		bool isPrivate = isPrivateKeyPrivate != CK_FALSE;
 
 		// Add the additional attributes
 		if (ulPrivateKeyAttributeCount > (maxAttribs - privateKeyAttribsCount))

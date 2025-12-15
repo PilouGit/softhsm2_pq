@@ -1170,6 +1170,58 @@ PKCS_API CK_RV C_CancelFunction(CK_SESSION_HANDLE hSession)
 	return CKR_FUNCTION_FAILED;
 }
 
+#ifdef WITH_PQC
+// Encapsulate a key using KEM (PKCS#11 v3.2)
+PKCS_API CK_RV C_EncapsulateKey
+(
+	CK_SESSION_HANDLE hSession,
+	CK_MECHANISM_PTR pMechanism,
+	CK_OBJECT_HANDLE hKey,
+	CK_ATTRIBUTE_PTR pTemplate,
+	CK_ULONG ulCount,
+	CK_BYTE_PTR pEncapsulatedKey,
+	CK_ULONG_PTR pulEncapsulatedKeyLen,
+	CK_OBJECT_HANDLE_PTR phKey
+)
+{
+	try
+	{
+		return SoftHSM::i()->C_EncapsulateKey(hSession, pMechanism, hKey, pTemplate, ulCount, pEncapsulatedKey, pulEncapsulatedKeyLen, phKey);
+	}
+	catch (...)
+	{
+		FatalException();
+	}
+
+	return CKR_FUNCTION_FAILED;
+}
+
+// Decapsulate a key using KEM (PKCS#11 v3.2)
+PKCS_API CK_RV C_DecapsulateKey
+(
+	CK_SESSION_HANDLE hSession,
+	CK_MECHANISM_PTR pMechanism,
+	CK_OBJECT_HANDLE hKey,
+	CK_ATTRIBUTE_PTR pTemplate,
+	CK_ULONG ulCount,
+	CK_BYTE_PTR pEncapsulatedKey,
+	CK_ULONG ulEncapsulatedKeyLen,
+	CK_OBJECT_HANDLE_PTR phKey
+)
+{
+	try
+	{
+		return SoftHSM::i()->C_DecapsulateKey(hSession, pMechanism, hKey, pTemplate, ulCount, pEncapsulatedKey, ulEncapsulatedKeyLen, phKey);
+	}
+	catch (...)
+	{
+		FatalException();
+	}
+
+	return CKR_FUNCTION_FAILED;
+}
+#endif // WITH_PQC
+
 // Wait or poll for a slot even on the specified slot
 PKCS_API CK_RV C_WaitForSlotEvent(CK_FLAGS flags, CK_SLOT_ID_PTR pSlot, CK_VOID_PTR pReserved)
 {

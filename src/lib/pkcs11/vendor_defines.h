@@ -39,7 +39,7 @@
 
 /* Vendor-specific mechanism types for PQC Hybrid schemes */
 
-/* Hybrid KEM mechanisms */
+/* Hybrid KEM mechanisms (0x80000001 - 0x800000FF) */
 #define CKM_VENDOR_MLKEM768_ECDH_P256      0x80000001UL  /* ML-KEM-768 + ECDH P-256 */
 #define CKM_VENDOR_MLKEM1024_ECDH_P384     0x80000002UL  /* ML-KEM-1024 + ECDH P-384 */
 #define CKM_VENDOR_MLKEM768_X25519         0x80000003UL  /* ML-KEM-768 + X25519 */
@@ -48,16 +48,16 @@
 #define CKM_VENDOR_MLDSA65_ECDSA_P256      0x80000010UL  /* ML-DSA-65 + ECDSA P-256 */
 #define CKM_VENDOR_MLDSA87_ECDSA_P384      0x80000011UL  /* ML-DSA-87 + ECDSA P-384 */
 
-/* Vendor-specific key types for PQC Hybrid schemes */
-#define CKK_VENDOR_HYBRID_KEM              0x80000001UL
-#define CKK_VENDOR_HYBRID_SIGNATURE        0x80000002UL
+/* Vendor-specific key types for PQC Hybrid schemes (0x80000100 - 0x800001FF) */
+#define CKK_VENDOR_HYBRID_KEM              0x80000100UL
+#define CKK_VENDOR_HYBRID_SIGNATURE        0x80000101UL
 
-/* Vendor-specific attributes for Hybrid keys */
-#define CKA_VENDOR_PQC_PUBLIC_KEY          0x80000001UL
-#define CKA_VENDOR_PQC_PRIVATE_KEY         0x80000002UL
-#define CKA_VENDOR_CLASSICAL_PUBLIC_KEY    0x80000003UL
-#define CKA_VENDOR_CLASSICAL_PRIVATE_KEY   0x80000004UL
-#define CKA_VENDOR_HYBRID_MECHANISM        0x80000005UL
+/* Vendor-specific attributes for Hybrid keys (0x80000200 - 0x800002FF) */
+#define CKA_VENDOR_PQC_PUBLIC_KEY          0x80000200UL
+#define CKA_VENDOR_PQC_PRIVATE_KEY         0x80000201UL
+#define CKA_VENDOR_CLASSICAL_PUBLIC_KEY    0x80000202UL
+#define CKA_VENDOR_CLASSICAL_PRIVATE_KEY   0x80000203UL
+#define CKA_VENDOR_HYBRID_MECHANISM        0x80000204UL
 
 /* Hybrid KEM combiner function identifiers */
 typedef enum {
