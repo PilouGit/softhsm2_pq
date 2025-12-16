@@ -137,6 +137,8 @@ std::auto_ptr<SoftHSM> SoftHSM::instance(NULL);
 
 static CK_RV newP11Object(CK_OBJECT_CLASS objClass, CK_KEY_TYPE keyType, CK_CERTIFICATE_TYPE certType, P11Object **p11object)
 {
+	printf("DEBUG newP11Object: objClass=0x%08lX, keyType=0x%08lX\n", (unsigned long)objClass, (unsigned long)keyType);
+	fflush(stdout);
 	switch(objClass) {
 		case CKO_DATA:
 			*p11object = new P11DataObj();
@@ -162,6 +164,16 @@ static CK_RV newP11Object(CK_OBJECT_CLASS objClass, CK_KEY_TYPE keyType, CK_CERT
 				*p11object = new P11GOSTPublicKeyObj();
 			else if (keyType == CKK_EC_EDWARDS)
 				*p11object = new P11EDPublicKeyObj();
+#ifdef WITH_PQC
+			else if (keyType == CKK_ML_KEM)
+				*p11object = new P11MLKEMPublicKeyObj();
+			else if (keyType == CKK_ML_DSA)
+				*p11object = new P11MLDSAPublicKeyObj();
+			else if (keyType == CKK_VENDOR_HYBRID_KEM)
+				*p11object = new P11HybridKEMPublicKeyObj();
+			else if (keyType == CKK_VENDOR_HYBRID_SIGNATURE)
+				*p11object = new P11HybridSignaturePublicKeyObj();
+#endif
 			else
 				return CKR_ATTRIBUTE_VALUE_INVALID;
 			break;
@@ -179,6 +191,16 @@ static CK_RV newP11Object(CK_OBJECT_CLASS objClass, CK_KEY_TYPE keyType, CK_CERT
 				*p11object = new P11GOSTPrivateKeyObj();
 			else if (keyType == CKK_EC_EDWARDS)
 				*p11object = new P11EDPrivateKeyObj();
+#ifdef WITH_PQC
+			else if (keyType == CKK_ML_KEM)
+				*p11object = new P11MLKEMPrivateKeyObj();
+			else if (keyType == CKK_ML_DSA)
+				*p11object = new P11MLDSAPrivateKeyObj();
+			else if (keyType == CKK_VENDOR_HYBRID_KEM)
+				*p11object = new P11HybridKEMPrivateKeyObj();
+			else if (keyType == CKK_VENDOR_HYBRID_SIGNATURE)
+				*p11object = new P11HybridSignaturePrivateKeyObj();
+#endif
 			else
 				return CKR_ATTRIBUTE_VALUE_INVALID;
 			break;
@@ -6327,6 +6349,7 @@ CK_RV SoftHSM::C_GenerateKeyPair
 )
 {
 	printf("DEBUG C_GenerateKeyPair: ENTRY - mechanism=0x%08lX\n", pMechanism ? pMechanism->mechanism : 0xFFFFFFFF);
+	fflush(stdout);
 
 	if (!isInitialised) return CKR_CRYPTOKI_NOT_INITIALIZED;
 
@@ -6465,7 +6488,10 @@ CK_RV SoftHSM::C_GenerateKeyPair
 	printf("DEBUG C_GenerateKeyPair: All template checks passed, mechanism=0x%08lX, keyType=0x%08lX\n", pMechanism->mechanism, keyType);
 
 	// Check user credentials
+	printf("DEBUG: session state=0x%08lX, ispublicKeyToken=%d, isprivateKeyToken=%d, ispublicKeyPrivate=%d, isprivateKeyPrivate=%d\n",
+		session->getState(), ispublicKeyToken, isprivateKeyToken, ispublicKeyPrivate, isprivateKeyPrivate);
 	CK_RV rv = haveWrite(session->getState(), ispublicKeyToken || isprivateKeyToken, ispublicKeyPrivate || isprivateKeyPrivate);
+	printf("DEBUG: haveWrite returned rv=0x%08lX\n", rv);
 	if (rv != CKR_OK)
 	{
 		printf("DEBUG C_GenerateKeyPair: haveWrite failed with rv=0x%08lX\n", rv);

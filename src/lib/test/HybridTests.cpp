@@ -268,7 +268,7 @@ void HybridTests::testHybridKEMKeyGen()
 
 	// Test ML-KEM768 + ECDH P-256
 	rv = generateHybridKEMKeyPair(hSession, CKM_VENDOR_MLKEM768_ECDH_P256,
-	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                               hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(hPuk != CK_INVALID_HANDLE);
@@ -276,7 +276,7 @@ void HybridTests::testHybridKEMKeyGen()
 
 	// Test ML-KEM1024 + ECDH P-384
 	rv = generateHybridKEMKeyPair(hSession, CKM_VENDOR_MLKEM1024_ECDH_P384,
-	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                               hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(hPuk != CK_INVALID_HANDLE);
@@ -284,7 +284,7 @@ void HybridTests::testHybridKEMKeyGen()
 
 	// Test ML-KEM768 + X25519
 	rv = generateHybridKEMKeyPair(hSession, CKM_VENDOR_MLKEM768_X25519,
-	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                               hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(hPuk != CK_INVALID_HANDLE);
@@ -305,21 +305,21 @@ void HybridTests::testHybridKEMEncapDecap()
 
 	// Test ML-KEM768 + ECDH P-256
 	rv = generateHybridKEMKeyPair(hSession, CKM_VENDOR_MLKEM768_ECDH_P256,
-	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                               hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	hybridKEMEncapDecap(CKM_VENDOR_MLKEM768_ECDH_P256, hSession, hPuk, hPrk);
 
 	// Test ML-KEM1024 + ECDH P-384
 	rv = generateHybridKEMKeyPair(hSession, CKM_VENDOR_MLKEM1024_ECDH_P384,
-	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                               hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	hybridKEMEncapDecap(CKM_VENDOR_MLKEM1024_ECDH_P384, hSession, hPuk, hPrk);
 
 	// Test ML-KEM768 + X25519
 	rv = generateHybridKEMKeyPair(hSession, CKM_VENDOR_MLKEM768_X25519,
-	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                               IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                               hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	hybridKEMEncapDecap(CKM_VENDOR_MLKEM768_X25519, hSession, hPuk, hPrk);
@@ -339,7 +339,7 @@ void HybridTests::testHybridSignatureKeyGen()
 
 	// Test ML-DSA-65 + ECDSA P-256
 	rv = generateHybridSignatureKeyPair(hSession, CKM_VENDOR_MLDSA65_ECDSA_P256,
-	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                                     hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(hPuk != CK_INVALID_HANDLE);
@@ -347,7 +347,7 @@ void HybridTests::testHybridSignatureKeyGen()
 
 	// Test ML-DSA-87 + ECDSA P-384
 	rv = generateHybridSignatureKeyPair(hSession, CKM_VENDOR_MLDSA87_ECDSA_P384,
-	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                                     hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(hPuk != CK_INVALID_HANDLE);
@@ -368,14 +368,14 @@ void HybridTests::testHybridSignatureSignVerify()
 
 	// Test ML-DSA-65 + ECDSA P-256
 	rv = generateHybridSignatureKeyPair(hSession, CKM_VENDOR_MLDSA65_ECDSA_P256,
-	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                                     hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	hybridSignatureSignVerify(CKM_VENDOR_MLDSA65_ECDSA_P256, hSession, hPuk, hPrk);
 
 	// Test ML-DSA-87 + ECDSA P-384
 	rv = generateHybridSignatureKeyPair(hSession, CKM_VENDOR_MLDSA87_ECDSA_P384,
-	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PRIVATE,
+	                                     IN_SESSION, IS_PUBLIC, IN_SESSION, IS_PUBLIC,
 	                                     hPuk, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	hybridSignatureSignVerify(CKM_VENDOR_MLDSA87_ECDSA_P384, hSession, hPuk, hPrk);

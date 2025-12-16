@@ -32,6 +32,7 @@
 
 #include "config.h"
 #include "P11Objects.h"
+#include "pkcs11/vendor_defines.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -1112,6 +1113,86 @@ bool P11MLDSAPublicKeyObj::init(OSObject *inobject)
 	initialized = true;
 	return true;
 }
+
+// Hybrid KEM Public Key
+P11HybridKEMPublicKeyObj::P11HybridKEMPublicKeyObj()
+{
+	initialized = false;
+}
+
+bool P11HybridKEMPublicKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_VENDOR_HYBRID_KEM) {
+		OSAttribute setKeyType((unsigned long)CKK_VENDOR_HYBRID_KEM);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PublicKeyObj::init(inobject)) return false;
+
+	// Create attributes for hybrid key components
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+
+// Hybrid Signature Public Key
+P11HybridSignaturePublicKeyObj::P11HybridSignaturePublicKeyObj()
+{
+	initialized = false;
+}
+
+bool P11HybridSignaturePublicKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_VENDOR_HYBRID_SIGNATURE) {
+		OSAttribute setKeyType((unsigned long)CKK_VENDOR_HYBRID_SIGNATURE);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PublicKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
 #endif // WITH_PQC
 
 //constructor
@@ -1579,6 +1660,86 @@ bool P11MLDSAPrivateKeyObj::init(OSObject *inobject)
 
 	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_ML_DSA) {
 		OSAttribute setKeyType((unsigned long)CKK_ML_DSA);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PrivateKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+
+// Hybrid KEM Private Key
+P11HybridKEMPrivateKeyObj::P11HybridKEMPrivateKeyObj()
+{
+	initialized = false;
+}
+
+bool P11HybridKEMPrivateKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_VENDOR_HYBRID_KEM) {
+		OSAttribute setKeyType((unsigned long)CKK_VENDOR_HYBRID_KEM);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PrivateKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
+	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
+
+	// Initialize the attributes
+	if (!attrValue->init() || !attrValueLen->init())
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrValue;
+		delete attrValueLen;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrValue->getType()] = attrValue;
+	attributes[attrValueLen->getType()] = attrValueLen;
+
+	initialized = true;
+	return true;
+}
+
+// Hybrid Signature Private Key
+P11HybridSignaturePrivateKeyObj::P11HybridSignaturePrivateKeyObj()
+{
+	initialized = false;
+}
+
+bool P11HybridSignaturePrivateKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_VENDOR_HYBRID_SIGNATURE) {
+		OSAttribute setKeyType((unsigned long)CKK_VENDOR_HYBRID_SIGNATURE);
 		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
 	}
 

@@ -250,6 +250,32 @@ public:
 protected:
 	bool initialized;
 };
+
+class P11HybridKEMPublicKeyObj : public P11PublicKeyObj
+{
+public:
+	// Constructor
+	P11HybridKEMPublicKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+
+class P11HybridSignaturePublicKeyObj : public P11PublicKeyObj
+{
+public:
+	// Constructor
+	P11HybridSignaturePublicKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
 #endif // WITH_PQC
 
 class P11PrivateKeyObj : public P11KeyObj
@@ -360,6 +386,32 @@ class P11MLDSAPrivateKeyObj : public P11PrivateKeyObj
 public:
 	// Constructor
 	P11MLDSAPrivateKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+
+class P11HybridKEMPrivateKeyObj : public P11PrivateKeyObj
+{
+public:
+	// Constructor
+	P11HybridKEMPrivateKeyObj();
+
+	// Add attributes
+	virtual bool init(OSObject *inobject);
+
+protected:
+	bool initialized;
+};
+
+class P11HybridSignaturePrivateKeyObj : public P11PrivateKeyObj
+{
+public:
+	// Constructor
+	P11HybridSignaturePrivateKeyObj();
 
 	// Add attributes
 	virtual bool init(OSObject *inobject);
