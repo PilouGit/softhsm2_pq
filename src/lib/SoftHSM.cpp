@@ -8224,28 +8224,48 @@ CK_RV SoftHSM::C_EncapsulateKey
 		memcpy(&paramSetBytes[0], &mlkemParamSet, sizeof(CK_ULONG));
 		serialized = serialized + paramSetBytes.serialise();
 
-		// Add EC curve
+		// Add EC curve (using proper OID format, same as HybridKEMParameters)
 		ByteString ecCurve;
 		if (hybridMech == CKM_VENDOR_MLKEM768_ECDH_P256)
-			ecCurve = ByteString((const unsigned char*)"secp256r1", 9);
+		{
+			// P-256 curve OID: 1.2.840.10045.3.1.7
+			unsigned char p256oid[] = {0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07};
+			ecCurve = ByteString(p256oid, sizeof(p256oid));
+		}
 		else if (hybridMech == CKM_VENDOR_MLKEM1024_ECDH_P384)
-			ecCurve = ByteString((const unsigned char*)"secp384r1", 9);
+		{
+			// P-384 curve OID: 1.3.132.0.34
+			unsigned char p384oid[] = {0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22};
+			ecCurve = ByteString(p384oid, sizeof(p384oid));
+		}
 		else if (hybridMech == CKM_VENDOR_MLKEM768_X25519)
-			ecCurve = ByteString((const unsigned char*)"X25519", 6);
+		{
+			// X25519 curve OID: 1.3.101.110
+			unsigned char x25519oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6e};
+			ecCurve = ByteString(x25519oid, sizeof(x25519oid));
+		}
 		serialized = serialized + ecCurve.serialise();
 
 		// Add keys
 		serialized = serialized + pqcPubKeyData.serialise() + classicalPubKeyData.serialise();
 
+		printf("DEBUG C_EncapsulateKey: About to deserialise hybrid public key\n");
 		if (!hybridPubKey.deserialise(serialized))
+		{
+			printf("DEBUG C_EncapsulateKey: Failed to deserialise hybrid public key\n");
 			return CKR_GENERAL_ERROR;
+		}
+		printf("DEBUG C_EncapsulateKey: Successfully deserialised hybrid public key\n");
 
 		// Perform encapsulation
 		HybridKEM hybridKEM;
+		printf("DEBUG C_EncapsulateKey: About to call hybridKEM.encapsulate\n");
 		if (!hybridKEM.encapsulate(&hybridPubKey, ciphertext, sharedSecret))
 		{
+			printf("DEBUG C_EncapsulateKey: hybridKEM.encapsulate failed\n");
 			return CKR_GENERAL_ERROR;
 		}
+		printf("DEBUG C_EncapsulateKey: Successfully encapsulated\n");
 	}
 	else // Handle regular ML-KEM keys
 	{
@@ -8487,14 +8507,26 @@ CK_RV SoftHSM::C_DecapsulateKey
 		memcpy(&paramSetBytes[0], &mlkemParamSet, sizeof(CK_ULONG));
 		serialized = serialized + paramSetBytes.serialise();
 
-		// Add EC curve
+		// Add EC curve (using proper OID format, same as HybridKEMParameters)
 		ByteString ecCurve;
 		if (hybridMech == CKM_VENDOR_MLKEM768_ECDH_P256)
-			ecCurve = ByteString((const unsigned char*)"secp256r1", 9);
+		{
+			// P-256 curve OID: 1.2.840.10045.3.1.7
+			unsigned char p256oid[] = {0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07};
+			ecCurve = ByteString(p256oid, sizeof(p256oid));
+		}
 		else if (hybridMech == CKM_VENDOR_MLKEM1024_ECDH_P384)
-			ecCurve = ByteString((const unsigned char*)"secp384r1", 9);
+		{
+			// P-384 curve OID: 1.3.132.0.34
+			unsigned char p384oid[] = {0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22};
+			ecCurve = ByteString(p384oid, sizeof(p384oid));
+		}
 		else if (hybridMech == CKM_VENDOR_MLKEM768_X25519)
-			ecCurve = ByteString((const unsigned char*)"X25519", 6);
+		{
+			// X25519 curve OID: 1.3.101.110
+			unsigned char x25519oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6e};
+			ecCurve = ByteString(x25519oid, sizeof(x25519oid));
+		}
 		serialized = serialized + ecCurve.serialise();
 
 		// Add keys
@@ -12115,11 +12147,10 @@ CK_RV SoftHSM::generateHybridKEM
 				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
 
 				// Hybrid KEM Public Key Attributes
-				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
 				ByteString pqcPub = pub->getPQCPublicKey();
 				ByteString classicalPub = pub->getClassicalPublicKey();
 
-				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, pMechanism->mechanism);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PUBLIC_KEY, pqcPub);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PUBLIC_KEY, classicalPub);
 
@@ -12188,11 +12219,10 @@ CK_RV SoftHSM::generateHybridKEM
 				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
 
 				// Hybrid KEM Private Key Attributes
-				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
 				ByteString pqcPriv = priv->getPQCPrivateKey();
 				ByteString classicalPriv = priv->getClassicalPrivateKey();
 
-				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, pMechanism->mechanism);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PRIVATE_KEY, pqcPriv);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PRIVATE_KEY, classicalPriv);
 
@@ -12324,11 +12354,10 @@ CK_RV SoftHSM::generateHybridSignature
 				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
 
 				// Hybrid Signature Public Key Attributes
-				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
 				ByteString pqcPub = pub->getPQCPublicKey();
 				ByteString classicalPub = pub->getClassicalPublicKey();
 
-				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, pMechanism->mechanism);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PUBLIC_KEY, pqcPub);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PUBLIC_KEY, classicalPub);
 
@@ -12397,11 +12426,10 @@ CK_RV SoftHSM::generateHybridSignature
 				bOK = bOK && osobject->setAttribute(CKA_LOCAL,true);
 
 				// Hybrid Signature Private Key Attributes
-				ByteString hybridMech((unsigned char*)&pMechanism->mechanism, sizeof(CK_MECHANISM_TYPE));
 				ByteString pqcPriv = priv->getPQCPrivateKey();
 				ByteString classicalPriv = priv->getClassicalPrivateKey();
 
-				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, hybridMech);
+				bOK = bOK && osobject->setAttribute(CKA_VENDOR_HYBRID_MECHANISM, pMechanism->mechanism);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_PQC_PRIVATE_KEY, pqcPriv);
 				bOK = bOK && osobject->setAttribute(CKA_VENDOR_CLASSICAL_PRIVATE_KEY, classicalPriv);
 
@@ -14052,6 +14080,8 @@ CK_RV SoftHSM::deriveSymmetric
 
 CK_RV SoftHSM::CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject, int op)
 {
+	fprintf(stderr, "***** ENTRY CreateObject: ulCount=%lu, op=%d *****\n", ulCount, op);
+	fflush(stderr);
 	if (!isInitialised) return CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (pTemplate == NULL_PTR) return CKR_ARGUMENTS_BAD;
@@ -14077,14 +14107,22 @@ CK_RV SoftHSM::CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTempla
 	CK_BBOOL isPrivate = CK_TRUE;
 	bool isImplicit = false;
 	CK_RV rv = extractObjectInformation(pTemplate,ulCount,objClass,keyType,certType, isOnToken, isPrivate, isImplicit);
+	fprintf(stderr, "DEBUG CreateObject: extractObjectInformation returned rv=0x%08lX\n", rv);
+	fflush(stderr);
 	if (rv != CKR_OK)
 	{
 		ERROR_MSG("Mandatory attribute not present in template");
+		fprintf(stderr, "DEBUG CreateObject: Returning early with rv=0x%08lX\n", rv);
+		fflush(stderr);
 		return rv;
 	}
 
+	fprintf(stderr, "DEBUG CreateObject: About to check credentials\n");
+	fflush(stderr);
 	// Check user credentials
 	rv = haveWrite(session->getState(), isOnToken, isPrivate);
+	fprintf(stderr, "DEBUG CreateObject: haveWrite returned rv=0x%08lX\n", rv);
+	fflush(stderr);
 	if (rv != CKR_OK)
 	{
 		if (rv == CKR_USER_NOT_LOGGED_IN)
@@ -14092,6 +14130,8 @@ CK_RV SoftHSM::CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTempla
 		if (rv == CKR_SESSION_READ_ONLY)
 			INFO_MSG("Session is read-only");
 
+		fprintf(stderr, "DEBUG CreateObject: Returning after haveWrite with rv=0x%08lX\n", rv);
+		fflush(stderr);
 		return rv;
 	}
 
@@ -14137,13 +14177,26 @@ CK_RV SoftHSM::CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTempla
 		object = sessionObjectStore->createObject(slot->getSlotID(), hSession, isPrivate != CK_FALSE);
 	}
 
-	if (object == NULL || !p11object->init(object))
+	if (object == NULL)
 	{
+		fprintf(stderr, "DEBUG CreateObject: object is NULL\n");
 		delete p11object;
 		return CKR_GENERAL_ERROR;
 	}
 
+	bool initResult = p11object->init(object);
+	fprintf(stderr, "DEBUG CreateObject: p11object->init returned %d for objClass=0x%08lX, keyType=0x%08lX\n", initResult, objClass, keyType);
+
+	if (!initResult)
+	{
+		fprintf(stderr, "DEBUG CreateObject: init failed\n");
+		delete p11object;
+		return CKR_GENERAL_ERROR;
+	}
+
+	fprintf(stderr, "DEBUG CreateObject: About to call saveTemplate with attribsCount=%lu, op=%d\n", attribsCount, op);
 	rv = p11object->saveTemplate(token, isPrivate != CK_FALSE, attribs,attribsCount,op);
+	fprintf(stderr, "DEBUG CreateObject: saveTemplate returned rv=0x%08lX\n", rv);
 	delete p11object;
 	if (rv != CKR_OK)
 		return rv;

@@ -105,28 +105,51 @@ ByteString HybridKEMPublicKey::serialise() const
 
 bool HybridKEMPublicKey::deserialise(ByteString& serialised)
 {
+	fprintf(stderr, "DEBUG HybridKEMPublicKey::deserialise: serialised size=%lu\n", serialised.size());
+	fflush(stderr);
+
 	ByteString mechanism = ByteString::chainDeserialise(serialised);
+	fprintf(stderr, "DEBUG: mechanism size=%lu, expected=%lu\n", mechanism.size(), sizeof(CK_MECHANISM_TYPE));
+	fflush(stderr);
 	if (mechanism.size() != sizeof(CK_MECHANISM_TYPE))
 	{
+		fprintf(stderr, "DEBUG: Failed at mechanism size check\n");
+		fflush(stderr);
 		return false;
 	}
 
 	memcpy(&hybridMechanism, mechanism.const_byte_str(), sizeof(CK_MECHANISM_TYPE));
+	fprintf(stderr, "DEBUG: hybridMechanism=0x%08lX\n", hybridMechanism);
+	fflush(stderr);
 
 	ByteString paramSet = ByteString::chainDeserialise(serialised);
+	fprintf(stderr, "DEBUG: paramSet size=%lu, expected=%lu\n", paramSet.size(), sizeof(unsigned long));
+	fflush(stderr);
 	if (paramSet.size() != sizeof(unsigned long))
 	{
+		fprintf(stderr, "DEBUG: Failed at paramSet size check\n");
+		fflush(stderr);
 		return false;
 	}
 
 	memcpy(&mlkemParameterSet, paramSet.const_byte_str(), sizeof(unsigned long));
+	fprintf(stderr, "DEBUG: mlkemParameterSet=%lu\n", mlkemParameterSet);
+	fflush(stderr);
 
 	ByteString dEcCurve = ByteString::chainDeserialise(serialised);
+	fprintf(stderr, "DEBUG: dEcCurve size=%lu\n", dEcCurve.size());
+	fflush(stderr);
 	ByteString dPqcPublicKey = ByteString::chainDeserialise(serialised);
+	fprintf(stderr, "DEBUG: dPqcPublicKey size=%lu\n", dPqcPublicKey.size());
+	fflush(stderr);
 	ByteString dClassicalPublicKey = ByteString::chainDeserialise(serialised);
+	fprintf(stderr, "DEBUG: dClassicalPublicKey size=%lu\n", dClassicalPublicKey.size());
+	fflush(stderr);
 
 	if ((dEcCurve.size() == 0) || (dPqcPublicKey.size() == 0) || (dClassicalPublicKey.size() == 0))
 	{
+		fprintf(stderr, "DEBUG: Failed - one or more components have size 0\n");
+		fflush(stderr);
 		return false;
 	}
 
@@ -134,6 +157,8 @@ bool HybridKEMPublicKey::deserialise(ByteString& serialised)
 	setPQCPublicKey(dPqcPublicKey);
 	setClassicalPublicKey(dClassicalPublicKey);
 
+	fprintf(stderr, "DEBUG: deserialise successful\n");
+	fflush(stderr);
 	return true;
 }
 

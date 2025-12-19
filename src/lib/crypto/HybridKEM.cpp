@@ -17,6 +17,8 @@
 #include "ECParameters.h"
 #include "ECPublicKey.h"
 #include "ECPrivateKey.h"
+#include "EDPublicKey.h"
+#include "EDPrivateKey.h"
 
 #ifdef WITH_PQC
 
@@ -74,32 +76,55 @@ bool HybridKEM::generateKeyPair(AsymmetricKeyPair** ppKeyPair, AsymmetricParamet
 
 	printf("DEBUG: ML-KEM key pair generated successfully\n");
 
-	// Generate ECDH key pair
-	ECParameters ecParams;
-	ecParams.setEC(params->getECCurve());
+	// Determine if we need ECDH or EdDSA (for X25519/X448)
+	// X25519 OID: 1.3.101.110 = {0x06, 0x03, 0x2b, 0x65, 0x6e}
+	// X448 OID: 1.3.101.111 = {0x06, 0x03, 0x2b, 0x65, 0x6f}
+	static const unsigned char x25519_oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6e};
+	static const unsigned char x448_oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6f};
+	bool isMontgomery = (params->getECCurve() == ByteString(x25519_oid, sizeof(x25519_oid)) ||
+	                     params->getECCurve() == ByteString(x448_oid, sizeof(x448_oid)));
 
-	printf("DEBUG: Getting ECDH algorithm\n");
-	AsymmetricAlgorithm* ecdh = CryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::ECDH);
-	if (ecdh == NULL)
+	AsymmetricAlgorithm* classicalAlgo = NULL;
+	AsymmetricParameters* classicalParams = NULL;
+
+	// Both ECDH and EdDSA use ECParameters
+	ECParameters* classicalECParams = new ECParameters();
+	classicalECParams->setEC(params->getECCurve());
+	classicalParams = classicalECParams;
+
+	if (isMontgomery) {
+		// Use EdDSA for Montgomery curves (X25519, X448)
+		printf("DEBUG: Getting EdDSA algorithm for X25519/X448\n");
+		classicalAlgo = CryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::EDDSA);
+	} else {
+		// Use ECDH for Weierstrass curves (P-256, P-384, etc.)
+		printf("DEBUG: Getting ECDH algorithm\n");
+		classicalAlgo = CryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::ECDH);
+	}
+
+	if (classicalAlgo == NULL)
 	{
-		ERROR_MSG("Failed to get ECDH algorithm");
-		printf("DEBUG: Failed to get ECDH algorithm\n");
+		ERROR_MSG("Failed to get classical algorithm (ECDH or EdDSA)");
+		printf("DEBUG: Failed to get classical algorithm\n");
+		delete classicalParams;
 		mlkem->recycleKeyPair(mlkemKP);
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 		return false;
 	}
 
-	printf("DEBUG: Generating ECDH key pair\n");
+	printf("DEBUG: Generating %s key pair\n", isMontgomery ? "EdDSA" : "ECDH");
 	AsymmetricKeyPair* ecdhKP = NULL;
-	if (!ecdh->generateKeyPair(&ecdhKP, &ecParams))
+	if (!classicalAlgo->generateKeyPair(&ecdhKP, classicalParams))
 	{
-		ERROR_MSG("Failed to generate ECDH key pair");
-		printf("DEBUG: Failed to generate ECDH key pair\n");
+		ERROR_MSG("Failed to generate classical key pair");
+		printf("DEBUG: Failed to generate classical key pair\n");
+		delete classicalParams;
 		mlkem->recycleKeyPair(mlkemKP);
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
-		CryptoFactory::i()->recycleAsymmetricAlgorithm(ecdh);
+		CryptoFactory::i()->recycleAsymmetricAlgorithm(classicalAlgo);
 		return false;
 	}
+	delete classicalParams;
 
 	printf("DEBUG: ECDH key pair generated successfully\n");
 
@@ -147,9 +172,9 @@ bool HybridKEM::generateKeyPair(AsymmetricKeyPair** ppKeyPair, AsymmetricParamet
 	// Clean up
 	printf("DEBUG: Cleaning up\n");
 	mlkem->recycleKeyPair(mlkemKP);
-	ecdh->recycleKeyPair(ecdhKP);
+	classicalAlgo->recycleKeyPair(ecdhKP);
 	OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
-	CryptoFactory::i()->recycleAsymmetricAlgorithm(ecdh);
+	CryptoFactory::i()->recycleAsymmetricAlgorithm(classicalAlgo);
 
 	printf("DEBUG: Returning success\n");
 	*ppKeyPair = hybridKP;
@@ -195,7 +220,7 @@ bool HybridKEM::getCiphertextSizes(CK_MECHANISM_TYPE mechanism, size_t& ctPQCSiz
 
 		case CKM_VENDOR_MLKEM768_X25519:
 			ctPQCSize = 1088;  // ML-KEM-768 ciphertext
-			ctClassicalSize = 32;  // X25519 public key
+			ctClassicalSize = 62;  // X25519 public key (serialized with EdDSA)
 			return true;
 
 		default:
@@ -287,45 +312,52 @@ bool HybridKEM::encapsulate(PublicKey* publicKey, ByteString& ciphertext, ByteSt
 	printf("DEBUG: ML-KEM encapsulation succeeded, ctPQC size=%zu, ssPQC size=%zu\n",
 	       ctPQC.size(), ssPQC.size());
 
-	// Get ECDH algorithm
-	printf("DEBUG: Getting ECDH algorithm\n");
+	// Determine if we need ECDH or EdDSA based on curve type
+	ByteString ecCurveData = hybridPub->getECCurve();
+	static const unsigned char x25519_oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6e};
+	static const unsigned char x448_oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6f};
+	bool isMontgomery = (ecCurveData == ByteString(x25519_oid, sizeof(x25519_oid)) ||
+	                     ecCurveData == ByteString(x448_oid, sizeof(x448_oid)));
+
+	// Get appropriate algorithm (ECDH or EdDSA)
+	AsymAlgo::Type algoType = isMontgomery ? AsymAlgo::EDDSA : AsymAlgo::ECDH;
+	printf("DEBUG: Getting %s algorithm\n", isMontgomery ? "EdDSA" : "ECDH");
 	fflush(stdout);
-	AsymmetricAlgorithm* ecdh = CryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::ECDH);
+	AsymmetricAlgorithm* ecdh = CryptoFactory::i()->getAsymmetricAlgorithm(algoType);
 	if (ecdh == NULL)
 	{
-		ERROR_MSG("Failed to get ECDH algorithm");
-		printf("DEBUG: Failed to get ECDH algorithm\n");
+		ERROR_MSG("Failed to get %s algorithm", isMontgomery ? "EdDSA" : "ECDH");
+		printf("DEBUG: Failed to get algorithm\n");
 		fflush(stdout);
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 		return false;
 	}
-	printf("DEBUG: ECDH algorithm obtained\n");
+	printf("DEBUG: Algorithm obtained\n");
 	fflush(stdout);
 
-	// Reconstruct EC public key from serialized data
-	printf("DEBUG: Reconstructing EC public key\n");
+	// Reconstruct EC/ED public key from serialized data
+	printf("DEBUG: Reconstructing public key\n");
 	fflush(stdout);
 	ByteString ecPubData = hybridPub->getClassicalPublicKey();
-	printf("DEBUG: EC pub data size=%zu\n", ecPubData.size());
+	printf("DEBUG: Pub data size=%zu\n", ecPubData.size());
 	fflush(stdout);
 	ByteString ecPubSerializedCopy = ecPubData; // Copy for deserialization
 	PublicKey* ecPub = NULL;
 	if (!ecdh->reconstructPublicKey(&ecPub, ecPubSerializedCopy))
 	{
-		ERROR_MSG("Failed to reconstruct EC public key");
-		printf("DEBUG: Failed to reconstruct EC public key\n");
+		ERROR_MSG("Failed to reconstruct public key");
+		printf("DEBUG: Failed to reconstruct public key\n");
 		fflush(stdout);
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 		CryptoFactory::i()->recycleAsymmetricAlgorithm(ecdh);
 		return false;
 	}
-	printf("DEBUG: EC public key reconstructed\n");
+	printf("DEBUG: Public key reconstructed\n");
 	fflush(stdout);
 
 	// Create EC parameters for ephemeral key generation
 	printf("DEBUG: Creating EC parameters\n");
 	fflush(stdout);
-	ByteString ecCurveData = hybridPub->getECCurve();
 	printf("DEBUG: EC curve data size=%zu\n", ecCurveData.size());
 	fflush(stdout);
 	ECParameters* ecParams = new ECParameters();
@@ -475,31 +507,39 @@ bool HybridKEM::decapsulate(PrivateKey* privateKey, const ByteString& ciphertext
 	printf("DEBUG: ML-KEM decapsulation succeeded, ssPQC size=%zu\n", ssPQC.size());
 	fflush(stdout);
 
-	// Get ECDH algorithm
-	printf("DEBUG: Getting ECDH algorithm\n");
+	// Determine if we need ECDH or EdDSA based on curve type
+	ByteString ecCurveData = hybridPriv->getECCurve();
+	static const unsigned char x25519_oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6e};
+	static const unsigned char x448_oid[] = {0x06, 0x03, 0x2b, 0x65, 0x6f};
+	bool isMontgomery = (ecCurveData == ByteString(x25519_oid, sizeof(x25519_oid)) ||
+	                     ecCurveData == ByteString(x448_oid, sizeof(x448_oid)));
+
+	// Get appropriate algorithm (ECDH or EdDSA)
+	AsymAlgo::Type algoType = isMontgomery ? AsymAlgo::EDDSA : AsymAlgo::ECDH;
+	printf("DEBUG: Getting %s algorithm\n", isMontgomery ? "EdDSA" : "ECDH");
 	fflush(stdout);
-	AsymmetricAlgorithm* ecdh = CryptoFactory::i()->getAsymmetricAlgorithm(AsymAlgo::ECDH);
+	AsymmetricAlgorithm* ecdh = CryptoFactory::i()->getAsymmetricAlgorithm(algoType);
 	if (ecdh == NULL)
 	{
-		ERROR_MSG("Failed to get ECDH algorithm");
-		printf("DEBUG: Failed to get ECDH algorithm\n");
+		ERROR_MSG("Failed to get %s algorithm", isMontgomery ? "EdDSA" : "ECDH");
+		printf("DEBUG: Failed to get algorithm\n");
 		fflush(stdout);
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 		return false;
 	}
 
-	// Reconstruct EC private key from serialized data
-	printf("DEBUG: Reconstructing EC private key\n");
+	// Reconstruct EC/ED private key from serialized data
+	printf("DEBUG: Reconstructing private key\n");
 	fflush(stdout);
 	ByteString ecPrivData = hybridPriv->getClassicalPrivateKey();
-	printf("DEBUG: EC priv data size=%zu\n", ecPrivData.size());
+	printf("DEBUG: Priv data size=%zu\n", ecPrivData.size());
 	fflush(stdout);
 	ByteString ecPrivCopy = ecPrivData;
 	PrivateKey* ecPriv = NULL;
 	if (!ecdh->reconstructPrivateKey(&ecPriv, ecPrivCopy))
 	{
-		ERROR_MSG("Failed to reconstruct EC private key");
-		printf("DEBUG: Failed to reconstruct EC private key\n");
+		ERROR_MSG("Failed to reconstruct private key");
+		printf("DEBUG: Failed to reconstruct private key\n");
 		fflush(stdout);
 		OQSCryptoFactory::i()->recycleAsymmetricAlgorithm(mlkem);
 		CryptoFactory::i()->recycleAsymmetricAlgorithm(ecdh);

@@ -75,6 +75,62 @@ jobs:
         run: |
           make check || (find . -name test-suite.log -exec cat {} \; && false)
 
+  linux_ossl_liboqs:
+    name: Linux with OpenSSL 3.0 + liboqs (PQC)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libcppunit-dev libssl-dev p11-kit cmake ninja-build
+      - name: Build and install liboqs
+        run: |
+          git clone --depth 1 --branch main https://github.com/open-quantum-safe/liboqs.git
+          cd liboqs
+          mkdir build && cd build
+          cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON ..
+          ninja
+          sudo ninja install
+          sudo ldconfig
+      - name: Build SoftHSM with PQC support
+        run: |
+          ./autogen.sh
+          ./configure --with-crypto-backend=openssl --with-pqc=liboqs
+          make
+      - name: Test
+        run: |
+          make check || (find . -name test-suite.log -exec cat {} \; && false)
+
+  linux_botan_liboqs:
+    name: Linux with Botan + liboqs (PQC)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libcppunit-dev libbotan-2-dev p11-kit cmake ninja-build
+      - name: Build and install liboqs
+        run: |
+          git clone --depth 1 --branch main https://github.com/open-quantum-safe/liboqs.git
+          cd liboqs
+          mkdir build && cd build
+          cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON ..
+          ninja
+          sudo ninja install
+          sudo ldconfig
+      - name: Build SoftHSM with PQC support
+        env:
+          CXXFLAGS: -Werror -DBOTAN_NO_DEPRECATED_WARNINGS
+        run: |
+          ./autogen.sh
+          ./configure --with-crypto-backend=botan --with-pqc=liboqs
+          make
+      - name: Test
+        run: |
+          make check || (find . -name test-suite.log -exec cat {} \; && false)
+
   macos:
     name: macOS (${{ matrix.backend }})
     runs-on: macos-14

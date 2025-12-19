@@ -25,6 +25,7 @@ p11test_SOURCES =		p11test.cpp \
 				AsymEncryptDecryptTests.cpp \
 				AsymWrapUnwrapTests.cpp \
 				HybridTests.cpp \
+				HybridPerformanceTests.cpp \
 				TestsBase.cpp \
 				TestsNoPINInitBase.cpp \
 				ForkTests.cpp \

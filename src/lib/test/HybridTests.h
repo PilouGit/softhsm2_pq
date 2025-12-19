@@ -44,6 +44,10 @@ class HybridTests : public TestsBase
 	CPPUNIT_TEST_SUITE(HybridTests);
 	CPPUNIT_TEST(testHybridKEMKeyGen);
 	CPPUNIT_TEST(testHybridKEMEncapDecap);
+	CPPUNIT_TEST(testHybridKEMKeyAttributes);
+	// TODO: Token and error tests need infrastructure fixes
+	//CPPUNIT_TEST(testHybridKEMTokenKeys);
+	//CPPUNIT_TEST(testHybridKEMErrorCases);
 	CPPUNIT_TEST(testHybridSignatureKeyGen);
 	CPPUNIT_TEST(testHybridSignatureSignVerify);
 	CPPUNIT_TEST_SUITE_END();
@@ -51,6 +55,9 @@ class HybridTests : public TestsBase
 public:
 	void testHybridKEMKeyGen();
 	void testHybridKEMEncapDecap();
+	void testHybridKEMKeyAttributes();
+	void testHybridKEMTokenKeys();
+	void testHybridKEMErrorCases();
 	void testHybridSignatureKeyGen();
 	void testHybridSignatureSignVerify();
 

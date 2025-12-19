@@ -227,6 +227,9 @@ CK_RV P11Object::saveTemplate(Token *token, bool isPrivate, CK_ATTRIBUTE_PTR pTe
 
 		if (attr == NULL)
 		{
+			fprintf(stderr, "ERROR: Attribute 0x%08lX not found in P11Object attributes map\n", pTemplate[i].type);
+			fflush(stderr);
+			ERROR_MSG("Attribute type 0x%08lX not found in attributes map", pTemplate[i].type);
 			osobject->abortTransaction();
 			return CKR_ATTRIBUTE_TYPE_INVALID;
 		}
@@ -1133,22 +1136,10 @@ bool P11HybridKEMPublicKeyObj::init(OSObject *inobject)
 	// Create parent
 	if (!P11PublicKeyObj::init(inobject)) return false;
 
-	// Create attributes for hybrid key components
-	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4);
-	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
-
-	// Initialize the attributes
-	if (!attrValue->init() || !attrValueLen->init())
-	{
-		ERROR_MSG("Could not initialize the attribute");
-		delete attrValue;
-		delete attrValueLen;
-		return false;
-	}
-
-	// Add them to the map
-	attributes[attrValue->getType()] = attrValue;
-	attributes[attrValueLen->getType()] = attrValueLen;
+	// NOTE: We don't add CKA_VALUE or CKA_VALUE_LEN for hybrid keys
+	// because they have separate PQC and classical components stored
+	// in vendor-specific attributes (CKA_VENDOR_PQC_PUBLIC_KEY and
+	// CKA_VENDOR_CLASSICAL_PUBLIC_KEY)
 
 	initialized = true;
 	return true;
@@ -1173,22 +1164,9 @@ bool P11HybridSignaturePublicKeyObj::init(OSObject *inobject)
 	// Create parent
 	if (!P11PublicKeyObj::init(inobject)) return false;
 
-	// Create attributes
-	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4);
-	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
-
-	// Initialize the attributes
-	if (!attrValue->init() || !attrValueLen->init())
-	{
-		ERROR_MSG("Could not initialize the attribute");
-		delete attrValue;
-		delete attrValueLen;
-		return false;
-	}
-
-	// Add them to the map
-	attributes[attrValue->getType()] = attrValue;
-	attributes[attrValueLen->getType()] = attrValueLen;
+	// NOTE: We don't add CKA_VALUE or CKA_VALUE_LEN for hybrid keys
+	// because they have separate PQC and classical components stored
+	// in vendor-specific attributes
 
 	initialized = true;
 	return true;
@@ -1706,22 +1684,9 @@ bool P11HybridKEMPrivateKeyObj::init(OSObject *inobject)
 	// Create parent
 	if (!P11PrivateKeyObj::init(inobject)) return false;
 
-	// Create attributes
-	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
-	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
-
-	// Initialize the attributes
-	if (!attrValue->init() || !attrValueLen->init())
-	{
-		ERROR_MSG("Could not initialize the attribute");
-		delete attrValue;
-		delete attrValueLen;
-		return false;
-	}
-
-	// Add them to the map
-	attributes[attrValue->getType()] = attrValue;
-	attributes[attrValueLen->getType()] = attrValueLen;
+	// NOTE: We don't add CKA_VALUE or CKA_VALUE_LEN for hybrid keys
+	// because they have separate PQC and classical components stored
+	// in vendor-specific attributes
 
 	initialized = true;
 	return true;
@@ -1746,22 +1711,9 @@ bool P11HybridSignaturePrivateKeyObj::init(OSObject *inobject)
 	// Create parent
 	if (!P11PrivateKeyObj::init(inobject)) return false;
 
-	// Create attributes
-	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
-	P11Attribute* attrValueLen = new P11AttrValueLen(osobject);
-
-	// Initialize the attributes
-	if (!attrValue->init() || !attrValueLen->init())
-	{
-		ERROR_MSG("Could not initialize the attribute");
-		delete attrValue;
-		delete attrValueLen;
-		return false;
-	}
-
-	// Add them to the map
-	attributes[attrValue->getType()] = attrValue;
-	attributes[attrValueLen->getType()] = attrValueLen;
+	// NOTE: We don't add CKA_VALUE or CKA_VALUE_LEN for hybrid keys
+	// because they have separate PQC and classical components stored
+	// in vendor-specific attributes
 
 	initialized = true;
 	return true;
