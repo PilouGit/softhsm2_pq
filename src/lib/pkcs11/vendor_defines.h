@@ -88,6 +88,12 @@ typedef CK_HYBRID_MECHANISM_INFO CK_PTR CK_HYBRID_MECHANISM_INFO_PTR;
 	((mech) == CKM_VENDOR_MLDSA65_ECDSA_P256 || \
 	 (mech) == CKM_VENDOR_MLDSA87_ECDSA_P384)
 
+/* Helper macro for ML-KEM specific mechanisms */
+#define IS_MLKEM_SPECIFIC_MECHANISM(mech) \
+	((mech) == CKM_MLKEM_512 || \
+	 (mech) == CKM_MLKEM_768 || \
+	 (mech) == CKM_MLKEM_1024)
+
 #define IS_HYBRID_MECHANISM(mech) \
 	(IS_HYBRID_KEM_MECHANISM(mech) || IS_HYBRID_SIGNATURE_MECHANISM(mech))
 

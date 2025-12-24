@@ -8343,23 +8343,18 @@ CK_RV SoftHSM::C_EncapsulateKey
 	}
 
 	// Return ciphertext length or ciphertext
-	printf("DEBUG C_EncapsulateKey: About to return ciphertext, pEncapsulatedKey=%p\n", pEncapsulatedKey);
 	if (pEncapsulatedKey == NULL_PTR)
 	{
-		printf("DEBUG C_EncapsulateKey: pEncapsulatedKey is NULL, returning length only\n");
 		*pulEncapsulatedKeyLen = ciphertext.size();
 		return CKR_OK;
 	}
 
-	printf("DEBUG C_EncapsulateKey: Checking buffer size, requested=%lu, needed=%zu\n", *pulEncapsulatedKeyLen, ciphertext.size());
 	if (*pulEncapsulatedKeyLen < ciphertext.size())
 	{
-		printf("DEBUG C_EncapsulateKey: Buffer too small\n");
 		*pulEncapsulatedKeyLen = ciphertext.size();
 		return CKR_BUFFER_TOO_SMALL;
 	}
 
-	printf("DEBUG C_EncapsulateKey: Copying ciphertext, phKey=%p, pTemplate=%p\n", phKey, pTemplate);
 	memcpy(pEncapsulatedKey, ciphertext.const_byte_str(), ciphertext.size());
 	*pulEncapsulatedKeyLen = ciphertext.size();
 

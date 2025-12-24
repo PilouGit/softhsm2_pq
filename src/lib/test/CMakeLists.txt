@@ -24,6 +24,9 @@ set(SOURCES p11test.cpp
             SignVerifyTests.cpp
             AsymEncryptDecryptTests.cpp
             AsymWrapUnwrapTests.cpp
+            HybridTests.cpp
+            HybridPerformanceTests.cpp
+            MLKEMVariantsTests.cpp
             TestsBase.cpp
             TestsNoPINInitBase.cpp
             ../common/log.cpp

@@ -26,6 +26,7 @@ p11test_SOURCES =		p11test.cpp \
 				AsymWrapUnwrapTests.cpp \
 				HybridTests.cpp \
 				HybridPerformanceTests.cpp \
+				MLKEMVariantsTests.cpp \
 				TestsBase.cpp \
 				TestsNoPINInitBase.cpp \
 				ForkTests.cpp \

@@ -1,0 +1,26 @@
+make  p11test
+make[1]: Entering directory '/home/pilou/myprojects/postquantum/SoftHSMv2/src/lib/test'
+make[1]: 'p11test' is up to date.
+make[1]: Leaving directory '/home/pilou/myprojects/postquantum/SoftHSMv2/src/lib/test'
+make  check-TESTS
+make[1]: Entering directory '/home/pilou/myprojects/postquantum/SoftHSMv2/src/lib/test'
+make[2]: Entering directory '/home/pilou/myprojects/postquantum/SoftHSMv2/src/lib/test'
+FAIL: p11test
+============================================================================
+Testsuite summary for SoftHSM 2.6.1
+============================================================================
+# TOTAL: 1
+# PASS:  0
+# SKIP:  0
+# XFAIL: 0
+# FAIL:  1
+# XPASS: 0
+# ERROR: 0
+============================================================================
+See src/lib/test/test-suite.log
+============================================================================
+make[2]: *** [Makefile:833: test-suite.log] Error 1
+make[2]: Leaving directory '/home/pilou/myprojects/postquantum/SoftHSMv2/src/lib/test'
+make[1]: *** [Makefile:941: check-TESTS] Error 2
+make[1]: Leaving directory '/home/pilou/myprojects/postquantum/SoftHSMv2/src/lib/test'
+make: *** [Makefile:1014: check-am] Error 2

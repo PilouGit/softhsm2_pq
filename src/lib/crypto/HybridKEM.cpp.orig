@@ -19,7 +19,6 @@
 #include "ECPrivateKey.h"
 #include "EDPublicKey.h"
 #include "EDPrivateKey.h"
-#include "DerUtil.h"
 
 #ifdef WITH_PQC
 
@@ -211,17 +210,17 @@ bool HybridKEM::getCiphertextSizes(CK_MECHANISM_TYPE mechanism, size_t& ctPQCSiz
 	{
 		case CKM_VENDOR_MLKEM768_ECDH_P256:
 			ctPQCSize = 1088;  // ML-KEM-768 ciphertext
-			ctClassicalSize = 65;  // P-256 public key (uncompressed point: 0x04 + 32 + 32)
+			ctClassicalSize = 93;  // P-256 public key (DER encoded)
 			return true;
 
 		case CKM_VENDOR_MLKEM1024_ECDH_P384:
 			ctPQCSize = 1568;  // ML-KEM-1024 ciphertext
-			ctClassicalSize = 97;  // P-384 public key (uncompressed point: 0x04 + 48 + 48)
+			ctClassicalSize = 122;  // P-384 public key (DER encoded)
 			return true;
 
 		case CKM_VENDOR_MLKEM768_X25519:
 			ctPQCSize = 1088;  // ML-KEM-768 ciphertext
-			ctClassicalSize = 32;  // X25519 public key (raw 32 bytes)
+			ctClassicalSize = 62;  // X25519 public key (serialized with EdDSA)
 			return true;
 
 		default:
@@ -410,22 +409,10 @@ bool HybridKEM::encapsulate(PublicKey* publicKey, ByteString& ciphertext, ByteSt
 	delete symKey;
 
 	// The ephemeral public key is the "ciphertext" for ECDH
-	printf("DEBUG: Getting ephemeral public key in raw format\n");
+	printf("DEBUG: Getting ephemeral public key\n");
 	fflush(stdout);
 	PublicKey* ephemeralPub = ephemeralKP->getPublicKey();
-	ByteString ctClassical;
-	if (isMontgomery)
-	{
-		// For X25519/X448, use raw format via getA() and unwrap DER encoding
-		EDPublicKey* edPub = dynamic_cast<EDPublicKey*>(ephemeralPub);
-		ctClassical = DERUTIL::octet2Raw(edPub->getA());
-	}
-	else
-	{
-		// For ECDH curves, use uncompressed point format via getQ() and unwrap DER encoding
-		ECPublicKey* ecPub = dynamic_cast<ECPublicKey*>(ephemeralPub);
-		ctClassical = DERUTIL::octet2Raw(ecPub->getQ());
-	}
+	ByteString ctClassical = ephemeralPub->serialise();
 	printf("DEBUG: ctClassical size=%zu\n", ctClassical.size());
 	fflush(stdout);
 
@@ -561,12 +548,10 @@ bool HybridKEM::decapsulate(PrivateKey* privateKey, const ByteString& ciphertext
 	printf("DEBUG: EC private key reconstructed\n");
 	fflush(stdout);
 
-	// Reconstruct ephemeral public key from ciphertext (raw bytes need DER wrapping)
+	// Reconstruct ephemeral public key from ciphertext (serialized public key)
 	printf("DEBUG: Reconstructing ephemeral public key from ctClassical\n");
 	fflush(stdout);
-	// Wrap raw ctClassical in DER OCTET STRING format for reconstruction
-	ByteString ctClassicalDER = DERUTIL::raw2Octet(ctClassical);
-	ByteString ctClassicalCopy = ctClassicalDER;
+	ByteString ctClassicalCopy = ctClassical;
 	PublicKey* ephemeralPub = NULL;
 	if (!ecdh->reconstructPublicKey(&ephemeralPub, ctClassicalCopy))
 	{
